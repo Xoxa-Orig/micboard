@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+mkdir -p "$ROOT/build"
+cd "$ROOT/build"
+
+# rcc does not track the QML files listed in the .qrc, so touch it to make
+# sure a QML-only edit reaches the binary.
+touch "$ROOT/src/resources.qrc"
+qmake6 "$ROOT/micboard-gui.pro"
+make -j"$(nproc)"
+
+echo "Built $ROOT/build/micboard-gui"

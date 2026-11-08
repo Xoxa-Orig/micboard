@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=MicBoard
+Name[ru]=MicBoard
+Comment=Soundboard window: play sounds into your microphone
+Comment[ru]=Окно саундборда: звуки прямо в микрофон
+Exec=micboard-gui
+Icon=micboard
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=micboard;soundboard;microphone;hotkey;
+StartupNotify=true
+StartupWMClass=micboard

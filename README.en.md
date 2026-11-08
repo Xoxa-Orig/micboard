@@ -20,6 +20,7 @@ Discord / OBS / browser  ←  MicBoard_Mic  ←  MicBoard (virtual sink)  ←  m
 - Optional mixing of your real microphone into the virtual one.
 - Local control port for scripts, Hyprland, Stream Deck, etc.
 - Autostart: systemd user service on Linux, registry on Windows.
+- An app window with sound cards, master volume and drag-and-drop (Qt 6, optional).
 - A single binary with no runtime dependencies beyond the system audio stack and optional `ffmpeg`.
 
 ## Quick start (Linux)
@@ -113,6 +114,48 @@ Start automatically at login:
 ```bash
 micboard autostart install
 ```
+
+## App window
+
+`micboard-gui` is a small window that drives everything without a terminal: sound cards, master volume, starting the daemon, and adding files by drag and drop. It does not replace the daemon; it controls it through the CLI.
+
+![MicBoard window](docs/screenshot-en.png)
+
+Build and install (Linux, Qt 6):
+
+```bash
+cd gui
+./bin/build
+./bin/install-local
+```
+
+`install-local` puts `micboard-gui` in `~/.local/bin` and the icon plus `micboard.desktop` in `~/.local/share`, so MicBoard opens from the app launcher like any other program.
+
+Run it by hand:
+
+```bash
+micboard-gui
+```
+
+What the window does:
+
+- a card for every sound, click one to play it;
+- **Add sound** and drag and drop append a `[[sound]]` block to the config;
+- remove a sound (× on the card) with a confirmation;
+- master volume, **Stop all**, **Reload config**, **Open config**;
+- start and stop the daemon;
+- shortcuts: `Space` plays the selected sound, `S` stops everything, `R` reloads, `A` adds, `Q` quits, `?` shows help.
+
+The window follows the language picked under Omarchy (`~/.config/omarchy/language`), falling back to the system locale. Russian and English are included.
+
+On Arch there is `gui/pkgbuild/PKGBUILD`:
+
+```bash
+cd gui
+./bin/install
+```
+
+It needs `qt6-base`, `qt6-declarative`, `qt6-wayland`, `xdg-desktop-portal` and `pipewire`.
 
 ## Hotkeys
 
@@ -248,17 +291,21 @@ micboard reload
 | `micboard run [--no-hotkeys]` | Run the daemon. |
 | `micboard play <id\|path> [--volume N] [--device NAME]` | Play a sound. Uses the daemon when running, otherwise plays directly. |
 | `micboard stop` | Stop all sounds. |
-| `micboard list` | List configured sounds. |
+| `micboard add <file> [--id ID] [--hotkey COMBO] [--volume N]` | Add a file to the config. |
+| `micboard remove <id>` | Remove a sound from the config. |
+| `micboard volume <0.0..4.0>` | Set and persist the master volume. |
+| `micboard list [--json]` | List configured sounds. |
 | `micboard devices` | List sinks and sources. |
 | `micboard setup [--remove] [--with-mic SOURCE]` | Create/remove the virtual microphone. |
 | `micboard init [--force]` | Write the default config. |
 | `micboard check` | Check the config, audio and hotkeys. |
 | `micboard reload` | Reload the config in the running daemon. |
-| `micboard status` | Show daemon status. |
+| `micboard status [--json]` | Show daemon status. |
+| `micboard quit` | Stop the daemon. |
 | `micboard hyprland-binds` | Print Hyprland `bindd` lines. |
 | `micboard autostart install\|remove\|status` | Manage autostart. |
 
-Every command accepts `--config <PATH>` and `--verbose`.
+Every command accepts `--config <PATH>` and `--verbose`. The `--json` flag on `list` and `status` prints machine-readable output, which is what `micboard-gui` reads.
 
 ### Control port
 
@@ -312,9 +359,13 @@ Common issues:
 cargo build --release
 cargo test
 cargo clippy --all-targets
+
+cd gui
+./bin/build
+./bin/test
 ```
 
-Linux build dependencies: `pkg-config`, `libasound2-dev` (Debian/Ubuntu) or `alsa-lib` (Arch).
+Linux build dependencies: `pkg-config`, `libasound2-dev` (Debian/Ubuntu) or `alsa-lib` (Arch). The window also needs `qt6-base`, `qt6-declarative` and `qt6-wayland`.
 
 ## License
 

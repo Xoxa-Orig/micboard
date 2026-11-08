@@ -20,6 +20,7 @@ Discord / OBS / браузер  ←  MicBoard_Mic  ←  MicBoard (виртуал
 - Микширование реального микрофона в виртуальный (опционально).
 - Локальный control-порт: можно управлять из скриптов, Hyprland, Stream Deck и т.п.
 - Автозапуск: systemd user service на Linux, реестр на Windows.
+- Окно приложения с карточками звуков, громкостью и перетаскиванием файлов (Qt 6, опционально).
 - Один бинарник, без фоновых зависимостей кроме системного аудио.
 
 ## Быстрый старт (Linux)
@@ -113,6 +114,48 @@ micboard stop
 ```bash
 micboard autostart install
 ```
+
+## Окно приложения
+
+`micboard-gui` — небольшое окно, из которого можно управлять всем без терминала: карточки звуков, общая громкость, запуск демона и добавление файлов перетаскиванием. Окно не заменяет демон, а управляет им через CLI.
+
+![Окно MicBoard](docs/screenshot-ru.png)
+
+Сборка и установка (Linux, Qt 6):
+
+```bash
+cd gui
+./bin/build
+./bin/install-local
+```
+
+`install-local` кладёт `micboard-gui` в `~/.local/bin`, иконку и `micboard.desktop` в `~/.local/share`. После этого MicBoard открывается из лаунчера приложений, как обычная программа.
+
+Запуск вручную:
+
+```bash
+micboard-gui
+```
+
+Что умеет окно:
+
+- карточки всех звуков, клик по карточке — проиграть;
+- **Add sound** и перетаскивание файлов добавляют `[[sound]]` в конфиг;
+- удаление звука (× на карточке) с подтверждением;
+- общая громкость, **Stop all**, **Reload config**, **Open config**;
+- запуск и остановка демона;
+- горячие клавиши: `Space` — проиграть выбранный, `S` — стоп, `R` — reload, `A` — добавить, `Q` — выход, `?` — справка.
+
+Окно следует языку Omarchy (`~/.config/omarchy/language`), а если он ещё не выбран — локали системы. Сейчас есть русский и английский.
+
+Для Arch есть `gui/pkgbuild/PKGBUILD`:
+
+```bash
+cd gui
+./bin/install
+```
+
+Нужны `qt6-base`, `qt6-declarative`, `qt6-wayland`, `xdg-desktop-portal` и `pipewire`.
 
 ## Горячие клавиши
 
@@ -248,17 +291,21 @@ micboard reload
 | `micboard run [--no-hotkeys]` | Запустить демон. |
 | `micboard play <id\|path> [--volume N] [--device NAME]` | Проиграть звук. Если демон запущен — через него, иначе напрямую. |
 | `micboard stop` | Остановить все звуки. |
-| `micboard list` | Показать настроенные звуки. |
+| `micboard add <file> [--id ID] [--hotkey COMBO] [--volume N]` | Добавить файл в конфиг. |
+| `micboard remove <id>` | Удалить звук из конфига. |
+| `micboard volume <0.0..4.0>` | Задать и сохранить общую громкость. |
+| `micboard list [--json]` | Показать настроенные звуки. |
 | `micboard devices` | Показать sink'и и источники. |
 | `micboard setup [--remove] [--with-mic SOURCE]` | Создать/удалить виртуальный микрофон. |
 | `micboard init [--force]` | Записать конфиг по умолчанию. |
 | `micboard check` | Проверить конфиг, аудио и хоткеи. |
 | `micboard reload` | Перечитать конфиг в работающем демоне. |
-| `micboard status` | Состояние демона. |
+| `micboard status [--json]` | Состояние демона. |
+| `micboard quit` | Остановить демон. |
 | `micboard hyprland-binds` | Вывести строки `bindd` для Hyprland. |
 | `micboard autostart install\|remove\|status` | Управление автозапуском. |
 
-Все команды принимают `--config <PATH>` и `--verbose`.
+Все команды принимают `--config <PATH>` и `--verbose`. Флаги `--json` у `list` и `status` выдают машиночитаемый вывод — их использует окно `micboard-gui`.
 
 ### Control-порт
 
@@ -312,9 +359,13 @@ micboard check
 cargo build --release
 cargo test
 cargo clippy --all-targets
+
+cd gui
+./bin/build
+./bin/test
 ```
 
-Linux-зависимости для сборки: `pkg-config`, `libasound2-dev` (Debian/Ubuntu) или `alsa-lib` (Arch).
+Linux-зависимости для сборки: `pkg-config`, `libasound2-dev` (Debian/Ubuntu) или `alsa-lib` (Arch). Для окна — `qt6-base`, `qt6-declarative`, `qt6-wayland`.
 
 ## Лицензия
 

@@ -1,5 +1,9 @@
 /target
 /dist
+/gui/build/
+/gui/pkgbuild/pkg/
+/gui/pkgbuild/src/
+*.pkg.tar.*
 *.log
 .DS_Store
 Thumbs.db

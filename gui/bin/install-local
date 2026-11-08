@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+"$ROOT/bin/build"
+
+BIN_DIR="${HOME}/.local/bin"
+ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
+APP_DIR="${HOME}/.local/share/applications"
+
+mkdir -p "$BIN_DIR" "$ICON_DIR" "$APP_DIR"
+install -Dm755 "$ROOT/build/micboard-gui" "$BIN_DIR/micboard-gui"
+install -Dm644 "$ROOT/pkgbuild/micboard.svg" "$ICON_DIR/micboard.svg"
+install -Dm644 "$ROOT/pkgbuild/micboard.desktop" "$APP_DIR/micboard.desktop"
+
+echo "Installed micboard-gui to $BIN_DIR"
+echo "The MicBoard entry in the app launcher now opens the window."

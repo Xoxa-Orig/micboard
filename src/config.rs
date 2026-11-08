@@ -172,7 +172,7 @@ impl Config {
     pub fn load_or_create(path: &Path) -> Result<Self> {
         if !path.exists() {
             write_default(path)?;
-            println!(
+            eprintln!(
                 "Created a new config at {}\nAdd some [[sound]] entries, then run `micboard run`.",
                 path.display()
             );
@@ -306,6 +306,151 @@ pub fn write_default(path: &Path) -> Result<()> {
     }
     fs::write(path, DEFAULT_CONFIG)
         .with_context(|| format!("cannot write config file {}", path.display()))?;
+    Ok(())
+}
+
+/// A path with the home directory shortened to `~`, for display and configs.
+pub fn display_path(path: &Path) -> String {
+    if let Some(home) = dirs::home_dir()
+        && let Ok(rest) = path.strip_prefix(&home)
+    {
+        return format!("~/{}", rest.to_string_lossy());
+    }
+    path.to_string_lossy().into_owned()
+}
+
+fn toml_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Append a `[[sound]]` block without rewriting the rest of the file, so the
+/// user's comments and formatting survive.
+pub fn append_sound(path: &Path, sound: &Sound) -> Result<()> {
+    let mut text = fs::read_to_string(path)
+        .with_context(|| format!("cannot read config file {}", path.display()))?;
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    if !text.trim_end().is_empty() {
+        text.push('\n');
+    }
+    text.push_str("[[sound]]\n");
+    text.push_str(&format!("id = {}\n", toml_quote(&sound.id)));
+    text.push_str(&format!("file = {}\n", toml_quote(&sound.file)));
+    if let Some(hotkey) = &sound.hotkey {
+        text.push_str(&format!("hotkey = {}\n", toml_quote(hotkey)));
+    }
+    if (sound.volume - 1.0).abs() > f32::EPSILON {
+        text.push_str(&format!("volume = {}\n", sound.volume));
+    }
+    fs::write(path, text)
+        .with_context(|| format!("cannot write config file {}", path.display()))?;
+    Ok(())
+}
+
+/// Remove a `[[sound]]` block by id, leaving every other byte alone.
+pub fn remove_sound(path: &Path, id: &str) -> Result<bool> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("cannot read config file {}", path.display()))?;
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut removed = false;
+    let mut index = 0;
+
+    while index < lines.len() {
+        if lines[index].trim() != "[[sound]]" {
+            out.push_str(lines[index]);
+            out.push('\n');
+            index += 1;
+            continue;
+        }
+
+        let start = index;
+        let mut end = index + 1;
+        while end < lines.len() && !lines[end].trim_start().starts_with('[') {
+            end += 1;
+        }
+
+        let mut block_id = None;
+        for line in &lines[start + 1..end] {
+            let line = line.trim_start();
+            if line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=')
+                && key.trim() == "id"
+            {
+                block_id = Some(value.trim().trim_matches('"').to_string());
+            }
+        }
+
+        if block_id.as_deref() == Some(id) {
+            removed = true;
+            index = end;
+            while index < lines.len() && lines[index].trim().is_empty() {
+                index += 1;
+            }
+            continue;
+        }
+
+        for line in &lines[start..end] {
+            out.push_str(line);
+            out.push('\n');
+        }
+        index = end;
+    }
+
+    if removed {
+        while out.contains("\n\n\n") {
+            out = out.replace("\n\n\n", "\n\n");
+        }
+        fs::write(path, out)
+            .with_context(|| format!("cannot write config file {}", path.display()))?;
+    }
+    Ok(removed)
+}
+
+/// Change only the `master_volume` line, keeping the rest of the file intact.
+pub fn set_master_volume(path: &Path, volume: f32) -> Result<()> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("cannot read config file {}", path.display()))?;
+    let mut out = String::with_capacity(text.len());
+    let mut found = false;
+
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let is_key = !trimmed.starts_with('#')
+            && trimmed
+                .split_once('=')
+                .map(|(key, _)| key.trim() == "master_volume")
+                .unwrap_or(false);
+        if is_key {
+            out.push_str(&format!("master_volume = {volume}\n"));
+            found = true;
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+
+    if !found {
+        out = format!("master_volume = {volume}\n{out}");
+    }
+
+    fs::write(path, out).with_context(|| format!("cannot write config file {}", path.display()))?;
     Ok(())
 }
 

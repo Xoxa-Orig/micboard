@@ -22,7 +22,7 @@ use crate::config::{Config, default_config_path};
 use crate::hotkey::KeyCombo;
 #[cfg(target_os = "linux")]
 use crate::util::is_x11_session;
-use crate::util::{command_exists, shell_quote};
+use crate::util::{command_exists, expand_path, shell_quote, slugify};
 
 #[derive(Parser)]
 #[command(
@@ -69,10 +69,40 @@ enum CliCommand {
         #[arg(long)]
         device: Option<String>,
     },
+    /// Add a media file to the config
+    Add {
+        /// Path to the media file
+        file: String,
+        /// Sound id (defaults to the file name)
+        #[arg(long)]
+        id: Option<String>,
+        /// Global hotkey for this sound
+        #[arg(long)]
+        hotkey: Option<String>,
+        /// Per-sound volume (0.0 .. 1.0)
+        #[arg(long, default_value_t = 1.0)]
+        volume: f32,
+    },
+    /// Remove a configured sound
+    Remove {
+        /// Sound id
+        id: String,
+    },
+    /// Set and persist the master volume
+    Volume {
+        /// Master volume (0.0 .. 1.0)
+        value: f32,
+    },
+    /// Stop the running daemon
+    Quit,
     /// Stop all currently playing sounds
     Stop,
     /// List configured sounds
-    List,
+    List {
+        /// Print machine-readable JSON (used by the GUI)
+        #[arg(long)]
+        json: bool,
+    },
     /// List audio output devices / sinks
     Devices,
     /// Create (or remove) the virtual microphone (Linux)
@@ -95,7 +125,11 @@ enum CliCommand {
     /// Reload the config in the running daemon
     Reload,
     /// Show daemon status
-    Status,
+    Status {
+        /// Print machine-readable JSON (used by the GUI)
+        #[arg(long)]
+        json: bool,
+    },
     /// Print Hyprland bind lines for all configured hotkeys
     HyprlandBinds,
     /// Manage autostart (systemd user service / Windows registry)
@@ -172,6 +206,22 @@ fn run(cli: Cli) -> Result<()> {
             println!("Played '{name}'.");
             Ok(())
         }
+        CliCommand::Add {
+            file,
+            id,
+            hotkey,
+            volume,
+        } => add_sound(&config_path, &file, id, hotkey, volume),
+        CliCommand::Remove { id } => remove_sound(&config_path, &id),
+        CliCommand::Volume { value } => set_volume(&config_path, value),
+        CliCommand::Quit => {
+            let config = Config::load_or_create(&config_path)?;
+            match ipc::request(config.port, "quit") {
+                Ok(response) => println!("{response}"),
+                Err(_) => println!("MicBoard daemon is not running."),
+            }
+            Ok(())
+        }
         CliCommand::Stop => {
             let config = Config::load_or_create(&config_path)?;
             match ipc::request(config.port, "stop") {
@@ -180,7 +230,7 @@ fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        CliCommand::List => list_sounds(&config_path),
+        CliCommand::List { json } => list_sounds(&config_path, json),
         CliCommand::Devices => {
             print_devices();
             Ok(())
@@ -196,15 +246,7 @@ fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        CliCommand::Status => {
-            let config = Config::load_or_create(&config_path)?;
-            match ipc::request(config.port, "status") {
-                Ok(response) if response.starts_with("ok") => println!("{response}"),
-                Ok(response) => bail!("{response}"),
-                Err(_) => println!("MicBoard daemon is not running."),
-            }
-            Ok(())
-        }
+        CliCommand::Status { json } => show_status(&config_path, json),
         CliCommand::HyprlandBinds => hyprland_binds(&config_path),
         CliCommand::Autostart { action } => match action {
             AutostartAction::Install => {
@@ -227,8 +269,43 @@ fn run(cli: Cli) -> Result<()> {
     }
 }
 
-fn list_sounds(config_path: &Path) -> Result<()> {
+fn list_sounds(config_path: &Path, json: bool) -> Result<()> {
     let config = Config::load_or_create(config_path)?;
+
+    if json {
+        let sounds: Vec<serde_json::Value> = config
+            .sounds
+            .iter()
+            .map(|sound| {
+                serde_json::json!({
+                    "id": sound.id,
+                    "file": sound.file,
+                    "hotkey": sound.hotkey,
+                    "volume": sound.volume,
+                    "exists": Path::new(&sound.file).is_file(),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "config": config_path.display().to_string(),
+                "port": config.port,
+                "device": config.effective_device(),
+                "master_volume": config.master_volume,
+                "mode": format!("{:?}", config.mode).to_lowercase(),
+                "hotkeys": format!("{:?}", config.hotkeys).to_lowercase(),
+                "virtual_mic": {
+                    "enabled": config.virtual_mic.enabled,
+                    "sink": config.virtual_mic.sink,
+                    "source": config.virtual_mic.source,
+                },
+                "sounds": sounds,
+            })
+        );
+        return Ok(());
+    }
+
     println!("Config: {}", config_path.display());
     println!(
         "Output: {}",
@@ -260,6 +337,118 @@ fn list_sounds(config_path: &Path) -> Result<()> {
             "  [missing]"
         };
         println!("{:<20} {:<18} {}{}", sound.id, hotkey, sound.file, missing);
+    }
+    Ok(())
+}
+
+fn add_sound(
+    config_path: &Path,
+    file: &str,
+    id: Option<String>,
+    hotkey: Option<String>,
+    volume: f32,
+) -> Result<()> {
+    let config = Config::load_or_create(config_path)?;
+    let base = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let path = expand_path(file, &base);
+    if !path.is_file() {
+        bail!("file not found: {}", path.display());
+    }
+    let path = path.canonicalize().unwrap_or(path);
+
+    let id = id.unwrap_or_else(|| {
+        path.file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "sound".to_string())
+    });
+    let id = slugify(&id);
+    if config.sound(&id).is_some() {
+        bail!("sound '{id}' already exists (remove it first or pick another --id)");
+    }
+
+    let hotkey = hotkey
+        .map(|hotkey| hotkey.trim().to_string())
+        .filter(|hotkey| !hotkey.is_empty());
+    if let Some(hotkey) = &hotkey {
+        KeyCombo::parse(hotkey)?;
+    }
+
+    let sound = config::Sound {
+        id: id.clone(),
+        file: config::display_path(&path),
+        hotkey,
+        volume: volume.clamp(0.0, 4.0),
+    };
+    config::append_sound(config_path, &sound)?;
+    let _ = ipc::request(config.port, "reload");
+    println!("Added '{id}'.");
+    Ok(())
+}
+
+fn remove_sound(config_path: &Path, id: &str) -> Result<()> {
+    let config = Config::load_or_create(config_path)?;
+    if config.sound(id).is_none() {
+        bail!("unknown sound '{id}'");
+    }
+    if !config::remove_sound(config_path, id)? {
+        bail!(
+            "could not find the '{id}' block in {}",
+            config_path.display()
+        );
+    }
+    let _ = ipc::request(config.port, "reload");
+    println!("Removed '{id}'.");
+    Ok(())
+}
+
+fn set_volume(config_path: &Path, value: f32) -> Result<()> {
+    let config = Config::load_or_create(config_path)?;
+    let value = value.clamp(0.0, 4.0);
+    config::set_master_volume(config_path, value)?;
+    let _ = ipc::request(config.port, &format!("volume {value}"));
+    println!("Master volume: {value:.2}");
+    Ok(())
+}
+
+fn show_status(config_path: &Path, json: bool) -> Result<()> {
+    let config = Config::load_or_create(config_path)?;
+    match ipc::request(config.port, "status") {
+        Ok(response) if response.starts_with("ok") => {
+            if json {
+                let mut object = serde_json::Map::new();
+                object.insert("running".to_string(), serde_json::json!(true));
+                for part in response.split_whitespace().skip(1) {
+                    let Some((key, value)) = part.split_once('=') else {
+                        continue;
+                    };
+                    let value = match key {
+                        "playing" | "sounds" => {
+                            serde_json::json!(value.parse::<u64>().unwrap_or(0))
+                        }
+                        "volume" => serde_json::json!(value.parse::<f64>().unwrap_or(1.0)),
+                        _ => serde_json::json!(value),
+                    };
+                    object.insert(key.to_string(), value);
+                }
+                println!("{}", serde_json::Value::Object(object));
+            } else {
+                println!("{response}");
+            }
+        }
+        Ok(response) if json => {
+            println!(
+                "{}",
+                serde_json::json!({ "running": false, "error": response })
+            );
+        }
+        Ok(response) => bail!("{response}"),
+        Err(_) => {
+            if json {
+                println!("{}", serde_json::json!({ "running": false }));
+            } else {
+                println!("MicBoard daemon is not running.");
+            }
+        }
     }
     Ok(())
 }

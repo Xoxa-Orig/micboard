@@ -1,0 +1,28 @@
+pkgname=micboard-gui
+pkgver=0.2.0
+pkgrel=1
+pkgdesc='Window and soundboard for MicBoard: play sounds into your microphone'
+arch=('x86_64' 'aarch64')
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'xdg-desktop-portal' 'pipewire' 'ffmpeg')
+makedepends=('gcc' 'make' 'rust')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/../.."
+  cargo build --release
+  cd gui
+  ./bin/build
+}
+
+package() {
+  cd "$startdir/../.."
+  install -Dm755 target/release/micboard "$pkgdir/usr/bin/micboard"
+  install -Dm755 gui/build/micboard-gui "$pkgdir/usr/bin/micboard-gui"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$startdir/micboard.svg" \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/micboard.svg"
+  install -Dm644 "$startdir/micboard.desktop" \
+    "$pkgdir/usr/share/applications/micboard.desktop"
+}
