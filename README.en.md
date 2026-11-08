@@ -88,6 +88,8 @@ micboard setup
 
 This creates the `MicBoard` sink and the `MicBoard_Mic` source. Select **MicBoard_Mic** as the microphone in Discord / OBS / your browser.
 
+By default the sound goes to the virtual microphone and to the system output at the same time, so you hear what you are sending — like Soundpad. Toggle it with `micboard monitor on|off` or the 🔊 button in the window.
+
 Verify everything:
 
 ```bash
@@ -148,6 +150,7 @@ What the window does:
 - remove a sound (× on the card) with a confirmation;
 - search by name, file or hotkey (`Ctrl+F`), with a match count;
 - light and dark themes: the ☾/☀ button or `T`; on first start it follows the active Omarchy theme mode;
+- the 🔊 button in the Now playing bar toggles local monitoring in your headphones;
 - master volume, **Stop all**, **Reload config**, **Open config**;
 - start and stop the daemon;
 - shortcuts: `Ctrl+F` searches, `Space` plays the selected sound, `S` stops everything, `R` reloads, `A` adds, `T` toggles the theme, `Q` quits, `?` shows help.
@@ -253,6 +256,8 @@ Default path: `~/.config/micboard/config.toml` (Linux) or `%APPDATA%\micboard\co
 | --- | --- | --- |
 | `device` | system default | Output sink/device. On Linux with `virtual_mic` enabled, `MicBoard` is used by default. |
 | `master_volume` | `1.0` | Master volume, `0.0 .. 4.0`. |
+| `monitor` | `true` | Hear the sounds in your speakers/headphones as well as the virtual mic. |
+| `monitor_device` | system default | Output used for monitoring (`monitor = true`). |
 | `latency_ms` | `40` | Output latency in milliseconds. |
 | `mode` | `"overlap"` | `"overlap"` or `"exclusive"`. |
 | `stop_all_hotkey` | `"ctrl+alt+s"` | Global stop-everything hotkey. |
@@ -300,6 +305,7 @@ micboard reload
 | `micboard add <file> [--id ID] [--hotkey COMBO] [--volume N]` | Add a file to the config. |
 | `micboard remove <id>` | Remove a sound from the config. |
 | `micboard volume <0.0..4.0>` | Set and persist the master volume. |
+| `micboard monitor [on\|off]` | Toggle hearing the sounds in your headphones. |
 | `micboard list [--json]` | List configured sounds. |
 | `micboard devices` | List sinks and sources. |
 | `micboard setup [--remove] [--with-mic SOURCE]` | Create/remove the virtual microphone. |
@@ -354,6 +360,7 @@ Common issues:
 | --- | --- |
 | `no readable keyboards in /dev/input` | `sudo usermod -aG input $USER`, then log out and back in. Or `hotkeys = "off"` + `micboard hyprland-binds`. |
 | Silence in Discord | Select **MicBoard_Mic**, not `MicBoard`; check `micboard devices`. |
+| I do not hear the sound myself | Turn on `micboard monitor on` or the 🔊 button; check `monitor_device`. |
 | Video does not play | Install `ffmpeg`. |
 | `control port ... is in use` | The daemon is already running. |
 | Sound is too quiet | Raise `master_volume` (above `1.0` is allowed) or the per-sound `volume`. |

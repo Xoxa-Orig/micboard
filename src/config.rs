@@ -26,6 +26,12 @@ pub const DEFAULT_CONFIG: &str = r#"# MicBoard — play media files into your mi
 # Master volume, 0.0 .. 1.0 (values above 1.0 amplify).
 master_volume = 1.0
 
+# Play every sound through your speakers/headphones as well as the virtual
+# microphone, so you can hear what you are sending (like Soundpad).
+monitor = true
+# Output used for monitoring. Defaults to the system output device.
+# monitor_device = "alsa_output.usb-..."
+
 # Output latency in milliseconds. Lower = snappier, but may crackle.
 latency_ms = 40
 
@@ -131,6 +137,10 @@ fn default_volume() -> f32 {
 pub struct Config {
     pub device: Option<String>,
     pub master_volume: f32,
+    /// Also play through the system output so the user hears the sound.
+    pub monitor: bool,
+    /// Output used for monitoring; `None` means the system default.
+    pub monitor_device: Option<String>,
     pub latency_ms: u32,
     pub mode: PlayMode,
     pub stop_all_hotkey: Option<String>,
@@ -146,6 +156,8 @@ impl Default for Config {
         Self {
             device: None,
             master_volume: 1.0,
+            monitor: true,
+            monitor_device: None,
             latency_ms: 40,
             mode: PlayMode::Overlap,
             stop_all_hotkey: Some("ctrl+alt+s".to_string()),
@@ -189,6 +201,13 @@ impl Config {
             self.latency_ms = 40;
         }
         self.latency_ms = self.latency_ms.clamp(5, 2000);
+        if self
+            .monitor_device
+            .as_deref()
+            .is_some_and(|device| device.trim().is_empty())
+        {
+            self.monitor_device = None;
+        }
 
         let mut seen: Vec<String> = Vec::new();
         for sound in &mut self.sounds {
@@ -425,6 +444,16 @@ pub fn remove_sound(path: &Path, id: &str) -> Result<bool> {
 
 /// Change only the `master_volume` line, keeping the rest of the file intact.
 pub fn set_master_volume(path: &Path, volume: f32) -> Result<()> {
+    set_top_level_value(path, "master_volume", &volume.to_string())
+}
+
+/// Turn local monitoring on or off without disturbing the comments in the
+/// config file.
+pub fn set_monitor(path: &Path, enabled: bool) -> Result<()> {
+    set_top_level_value(path, "monitor", if enabled { "true" } else { "false" })
+}
+
+fn set_top_level_value(path: &Path, key: &str, value: &str) -> Result<()> {
     let text = fs::read_to_string(path)
         .with_context(|| format!("cannot read config file {}", path.display()))?;
     let mut out = String::with_capacity(text.len());
@@ -435,10 +464,10 @@ pub fn set_master_volume(path: &Path, volume: f32) -> Result<()> {
         let is_key = !trimmed.starts_with('#')
             && trimmed
                 .split_once('=')
-                .map(|(key, _)| key.trim() == "master_volume")
+                .map(|(name, _)| name.trim() == key)
                 .unwrap_or(false);
         if is_key {
-            out.push_str(&format!("master_volume = {volume}\n"));
+            out.push_str(&format!("{key} = {value}\n"));
             found = true;
         } else {
             out.push_str(line);
@@ -447,7 +476,7 @@ pub fn set_master_volume(path: &Path, volume: f32) -> Result<()> {
     }
 
     if !found {
-        out = format!("master_volume = {volume}\n{out}");
+        out = format!("{key} = {value}\n{out}");
     }
 
     fs::write(path, out).with_context(|| format!("cannot write config file {}", path.display()))?;
@@ -496,5 +525,26 @@ mod tests {
         };
         config.normalize(Path::new("/tmp"));
         assert_eq!(config.sounds[1].id, "same-2");
+    }
+
+    #[test]
+    fn monitoring_is_on_by_default_and_persists() {
+        assert!(Config::default().monitor);
+        assert!(Config::default().monitor_device.is_none());
+
+        let dir = std::env::temp_dir().join(format!("micboard-config-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(&path, "# keep me\nmaster_volume = 1.0\n").unwrap();
+
+        set_monitor(&path, false).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("# keep me\n"));
+        assert!(text.contains("monitor = false\n"));
+        assert!(!Config::load(&path).unwrap().monitor);
+
+        set_monitor(&path, true).unwrap();
+        assert!(Config::load(&path).unwrap().monitor);
+        fs::remove_dir_all(&dir).ok();
     }
 }

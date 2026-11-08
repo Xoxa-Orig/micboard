@@ -392,6 +392,17 @@ ApplicationWindow {
                     }
 
                     SoftButton {
+                        text: backend.monitorEnabled ? "🔊" : "🔇"
+                        primary: backend.monitorEnabled
+                        onClicked: backend.setMonitor(!backend.monitorEnabled)
+                        ToolTip.visible: hovered
+                        ToolTip.text: backend.monitorEnabled
+                                      ? qsTr("You hear the sounds in your headphones")
+                                      : qsTr("Sounds only go to the virtual mic")
+                        ToolTip.delay: 400
+                    }
+
+                    SoftButton {
                         text: qsTr("Stop all")
                         active: backend.playing > 0
                         onClicked: backend.stopAll()

@@ -11,7 +11,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 
 use crate::config::{Config, PlayMode};
 
@@ -71,13 +71,20 @@ pub struct AudioHandle {
 }
 
 impl AudioHandle {
+    /// Play into the config's output device (normally the virtual mic).
     pub fn spawn(config: &Config) -> Self {
+        Self::spawn_on(config, config.effective_device())
+    }
+
+    /// Play into a specific device. `None` means the system default; the
+    /// daemon uses this for the optional local-monitoring output.
+    pub fn spawn_on(config: &Config, device: Option<String>) -> Self {
         let (tx, rx) = mpsc::channel();
         let master = Arc::new(AtomicU32::new(config.master_volume.to_bits()));
         let status = Arc::new(Mutex::new(Status {
             playing: 0,
             active: Vec::new(),
-            device: config.effective_device(),
+            device: device.clone(),
             last_error: None,
             master_volume: config.master_volume,
         }));
@@ -86,7 +93,6 @@ impl AudioHandle {
         let engine_master = Arc::clone(&master);
         let engine_status = Arc::clone(&status);
         let engine_pending = Arc::clone(&pending);
-        let device = config.effective_device();
         let latency_ms = config.latency_ms;
         let mode = config.mode;
 
@@ -165,12 +171,44 @@ impl AudioHandle {
 /// not running (`micboard play ...`).
 pub fn play_blocking(config: &Config, req: PlayRequest) -> Result<()> {
     let handle = AudioHandle::spawn(config);
-    handle.play(req)?;
+
+    // Match the daemon: play through the speakers as well, unless monitoring
+    // is off or it would target the same device.
+    let mut monitor = None;
+    if config.monitor && config.monitor_device != config.effective_device() {
+        let engine = AudioHandle::spawn_on(config, config.monitor_device.clone());
+        let monitor_request = PlayRequest {
+            device: None,
+            ..req.clone()
+        };
+        match engine.play(monitor_request) {
+            Ok(()) => monitor = Some(engine),
+            Err(err) => {
+                warn!("monitor playback failed: {err:#}");
+                engine.shutdown();
+            }
+        }
+    }
+
+    if let Err(err) = handle.play(req) {
+        handle.shutdown();
+        if let Some(engine) = monitor {
+            engine.shutdown();
+        }
+        return Err(err);
+    }
     thread::sleep(Duration::from_millis(120));
     loop {
         let status = handle.status();
-        if handle.pending() == 0 && status.playing == 0 {
+        let main_done = handle.pending() == 0 && status.playing == 0;
+        let monitor_done = monitor
+            .as_ref()
+            .is_none_or(|engine| engine.pending() == 0 && engine.status().playing == 0);
+        if main_done && monitor_done {
             handle.shutdown();
+            if let Some(engine) = monitor {
+                engine.shutdown();
+            }
             if let Some(err) = status.last_error {
                 bail!(err);
             }

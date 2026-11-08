@@ -20,6 +20,7 @@ class Backend : public QObject {
     Q_PROPERTY(int playing READ playing NOTIFY playingChanged)
     Q_PROPERTY(QStringList playingIds READ playingIds NOTIFY playingChanged)
     Q_PROPERTY(double masterVolume READ masterVolume WRITE setMasterVolume NOTIFY masterVolumeChanged)
+    Q_PROPERTY(bool monitorEnabled READ monitorEnabled NOTIFY configChanged)
     Q_PROPERTY(QString device READ device NOTIFY configChanged)
     Q_PROPERTY(QString source READ source NOTIFY configChanged)
     Q_PROPERTY(QString mode READ mode NOTIFY configChanged)
@@ -41,6 +42,7 @@ public:
     int playing() const { return m_playing; }
     QStringList playingIds() const { return m_playingIds; }
     double masterVolume() const { return m_masterVolume; }
+    bool monitorEnabled() const { return m_monitor; }
     QString device() const { return m_device; }
     QString source() const { return m_source; }
     QString mode() const { return m_mode; }
@@ -66,6 +68,7 @@ public:
     Q_INVOKABLE void openConfig();
     Q_INVOKABLE void clearMessage();
     Q_INVOKABLE void setMasterVolume(double volume);
+    Q_INVOKABLE void setMonitor(bool enabled);
 
 signals:
     void soundsChanged();
@@ -101,6 +104,7 @@ private:
     QStringList m_playingIds;
     double m_masterVolume = 1.0;
     bool m_volumeDirty = false;
+    bool m_monitor = true;
     QString m_device;
     QString m_source;
     QString m_mode = "overlap";

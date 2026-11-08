@@ -15,6 +15,9 @@ pub struct App {
     pub config_path: PathBuf,
     pub config: RwLock<Config>,
     pub audio: AudioHandle,
+    /// Optional second engine that plays the same sound through the system
+    /// output, so the user hears what is being sent to the microphone.
+    pub monitor: RwLock<Option<AudioHandle>>,
     pub hotkeys: HotkeyService,
     pub shutdown: mpsc::Sender<()>,
 }
@@ -36,18 +39,41 @@ impl App {
         };
         let request = PlayRequest {
             name: name.clone(),
-            path,
+            path: path.clone(),
             volume: volume.unwrap_or(configured_volume),
             device,
         };
         self.audio.play(request)?;
+        if let Some(monitor) = self.monitor.read().unwrap().as_ref() {
+            // The monitor engine has its own output; never inherit the
+            // per-request device override from the virtual-mic playback.
+            let monitor_request = PlayRequest {
+                name: name.clone(),
+                path,
+                volume: volume.unwrap_or(configured_volume),
+                device: None,
+            };
+            if let Err(err) = monitor.play(monitor_request) {
+                warn!("monitor playback failed: {err:#}");
+            }
+        }
         Ok(name)
     }
 
     pub fn set_master(&self, volume: f32) {
         let volume = volume.clamp(0.0, 4.0);
         self.audio.set_master(volume);
+        if let Some(monitor) = self.monitor.read().unwrap().as_ref() {
+            monitor.set_master(volume);
+        }
         self.config.write().unwrap().master_volume = volume;
+    }
+
+    pub fn stop_all(&self) {
+        self.audio.stop_all();
+        if let Some(monitor) = self.monitor.read().unwrap().as_ref() {
+            monitor.stop_all();
+        }
     }
 
     pub fn reload(&self) -> Result<()> {
@@ -61,7 +87,8 @@ impl App {
         }
 
         let old = self.config.read().unwrap().clone();
-        if old.effective_device() != config.effective_device() {
+        let main_device_changed = old.effective_device() != config.effective_device();
+        if main_device_changed {
             self.audio.set_device(config.effective_device());
         }
         if (old.master_volume - config.master_volume).abs() > f32::EPSILON {
@@ -69,7 +96,23 @@ impl App {
         }
         if old.mode != config.mode {
             self.audio.set_mode(config.mode);
+            if let Some(monitor) = self.monitor.read().unwrap().as_ref() {
+                monitor.set_mode(config.mode);
+            }
         }
+
+        let monitor_changed = main_device_changed
+            || old.monitor != config.monitor
+            || old.monitor_device != config.monitor_device;
+        if monitor_changed {
+            let mut monitor = self.monitor.write().unwrap();
+            if let Some(previous) = monitor.take() {
+                previous.stop_all();
+                previous.shutdown();
+            }
+            *monitor = spawn_monitor(&config);
+        }
+
         self.hotkeys.update(&config);
         *self.config.write().unwrap() = config;
         Ok(())
@@ -89,6 +132,9 @@ impl App {
             }
         };
         self.audio.stop_one(&id);
+        if let Some(monitor) = self.monitor.read().unwrap().as_ref() {
+            monitor.stop_one(&id);
+        }
     }
 
     pub fn status_line(&self) -> String {
@@ -128,6 +174,13 @@ impl App {
     }
 }
 
+fn spawn_monitor(config: &Config) -> Option<AudioHandle> {
+    if !config.monitor || config.monitor_device == config.effective_device() {
+        return None;
+    }
+    Some(AudioHandle::spawn_on(config, config.monitor_device.clone()))
+}
+
 pub fn run(config_path: PathBuf, no_hotkeys: bool) -> Result<()> {
     let config = Config::load_or_create(&config_path)?;
 
@@ -139,6 +192,7 @@ pub fn run(config_path: PathBuf, no_hotkeys: bool) -> Result<()> {
     }
 
     let audio = AudioHandle::spawn(&config);
+    let monitor = spawn_monitor(&config);
     let (action_tx, action_rx) = mpsc::channel();
     let hotkeys = HotkeyService::start(&config, no_hotkeys, action_tx);
     let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
@@ -151,6 +205,7 @@ pub fn run(config_path: PathBuf, no_hotkeys: bool) -> Result<()> {
         config_path: config_path.clone(),
         config: RwLock::new(config),
         audio,
+        monitor: RwLock::new(monitor),
         hotkeys,
         shutdown: shutdown_tx.clone(),
     });
@@ -179,15 +234,18 @@ pub fn run(config_path: PathBuf, no_hotkeys: bool) -> Result<()> {
                     warn!("hotkey for '{id}' failed: {err:#}");
                 }
             }
-            Ok(Action::StopAll) => app.audio.stop_all(),
+            Ok(Action::StopAll) => app.stop_all(),
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
     }
 
     info!("shutting down");
-    app.audio.stop_all();
+    app.stop_all();
     app.audio.shutdown();
+    if let Some(monitor) = app.monitor.read().unwrap().as_ref() {
+        monitor.shutdown();
+    }
     thread::sleep(Duration::from_millis(80));
     Ok(())
 }

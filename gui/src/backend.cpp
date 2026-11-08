@@ -158,6 +158,12 @@ void Backend::loadConfig() {
         emit masterVolumeChanged();
     }
 
+    const bool monitor = root.value("monitor").toBool(true);
+    if (monitor != m_monitor) {
+        m_monitor = monitor;
+        emit configChanged();
+    }
+
     QVariantList sounds;
     const QJsonArray array = root.value("sounds").toArray();
     for (const auto &value : array) {
@@ -428,6 +434,14 @@ void Backend::onPortalResponse(uint response, const QVariantMap &results) {
 void Backend::openConfig() {
     if (!QDesktopServices::openUrl(QUrl::fromLocalFile(m_configPath)))
         setMessage(tr("Could not open the config file."), true);
+}
+
+void Backend::setMonitor(bool enabled) {
+    if (m_monitor == enabled)
+        return;
+    m_monitor = enabled;
+    emit configChanged();
+    runAction({"monitor", enabled ? "on" : "off"}, {}, true);
 }
 
 void Backend::setMasterVolume(double volume) {

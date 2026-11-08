@@ -93,6 +93,11 @@ enum CliCommand {
         /// Master volume (0.0 .. 1.0)
         value: f32,
     },
+    /// Hear sounds through your speakers as well as the virtual mic
+    Monitor {
+        /// "on" or "off" (omit to show the current value)
+        state: Option<String>,
+    },
     /// Stop the running daemon
     Quit,
     /// Stop all currently playing sounds, or one sound by id
@@ -217,6 +222,7 @@ fn run(cli: Cli) -> Result<()> {
         } => add_sound(&config_path, &file, id, hotkey, volume),
         CliCommand::Remove { id } => remove_sound(&config_path, &id),
         CliCommand::Volume { value } => set_volume(&config_path, value),
+        CliCommand::Monitor { state } => set_monitor(&config_path, state.as_deref()),
         CliCommand::Quit => {
             let config = Config::load_or_create(&config_path)?;
             match ipc::request(config.port, "quit") {
@@ -300,6 +306,8 @@ fn list_sounds(config_path: &Path, json: bool) -> Result<()> {
                 "port": config.port,
                 "device": config.effective_device(),
                 "master_volume": config.master_volume,
+                "monitor": config.monitor,
+                "monitor_device": config.monitor_device,
                 "mode": format!("{:?}", config.mode).to_lowercase(),
                 "hotkeys": format!("{:?}", config.hotkeys).to_lowercase(),
                 "virtual_mic": {
@@ -414,6 +422,28 @@ fn set_volume(config_path: &Path, value: f32) -> Result<()> {
     config::set_master_volume(config_path, value)?;
     let _ = ipc::request(config.port, &format!("volume {value}"));
     println!("Master volume: {value:.2}");
+    Ok(())
+}
+
+fn set_monitor(config_path: &Path, state: Option<&str>) -> Result<()> {
+    let config = Config::load_or_create(config_path)?;
+    let Some(state) = state else {
+        println!(
+            "Monitoring: {}\nOutput: {}",
+            if config.monitor { "on" } else { "off" },
+            config.monitor_device.as_deref().unwrap_or("system default")
+        );
+        return Ok(());
+    };
+
+    let enabled = match state.to_ascii_lowercase().as_str() {
+        "on" | "true" | "1" | "yes" => true,
+        "off" | "false" | "0" | "no" => false,
+        other => bail!("monitor expects 'on' or 'off', got '{other}'"),
+    };
+    config::set_monitor(config_path, enabled)?;
+    let _ = ipc::request(config.port, "reload");
+    println!("Monitoring: {}", if enabled { "on" } else { "off" });
     Ok(())
 }
 
@@ -559,6 +589,17 @@ fn check(config_path: &Path) -> Result<()> {
         config
             .effective_device()
             .unwrap_or_else(|| "system default".to_string())
+    );
+    println!(
+        "monitor: {}",
+        if config.monitor {
+            format!(
+                "on ({})",
+                config.monitor_device.as_deref().unwrap_or("system default")
+            )
+        } else {
+            "off".to_string()
+        }
     );
 
     let outputs = devices::list_outputs();
