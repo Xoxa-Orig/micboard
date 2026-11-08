@@ -18,6 +18,7 @@ class Backend : public QObject {
     Q_PROPERTY(bool running READ running NOTIFY runningChanged)
     Q_PROPERTY(bool starting READ starting NOTIFY startingChanged)
     Q_PROPERTY(int playing READ playing NOTIFY playingChanged)
+    Q_PROPERTY(QStringList playingIds READ playingIds NOTIFY playingChanged)
     Q_PROPERTY(double masterVolume READ masterVolume WRITE setMasterVolume NOTIFY masterVolumeChanged)
     Q_PROPERTY(QString device READ device NOTIFY configChanged)
     Q_PROPERTY(QString source READ source NOTIFY configChanged)
@@ -38,6 +39,7 @@ public:
     bool running() const { return m_running; }
     bool starting() const { return m_starting; }
     int playing() const { return m_playing; }
+    QStringList playingIds() const { return m_playingIds; }
     double masterVolume() const { return m_masterVolume; }
     QString device() const { return m_device; }
     QString source() const { return m_source; }
@@ -52,6 +54,7 @@ public:
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void play(const QString &id);
+    Q_INVOKABLE void stopSound(const QString &id);
     Q_INVOKABLE void stopAll();
     Q_INVOKABLE void startDaemon();
     Q_INVOKABLE void stopDaemon();
@@ -95,6 +98,7 @@ private:
     bool m_running = false;
     bool m_starting = false;
     int m_playing = 0;
+    QStringList m_playingIds;
     double m_masterVolume = 1.0;
     bool m_volumeDirty = false;
     QString m_device;

@@ -75,11 +75,32 @@ impl App {
         Ok(())
     }
 
+    pub fn stop_target(&self, target: &str) {
+        // Accept an id from the config as well as the file path that was
+        // passed to `micboard play` (its playback is named after the stem).
+        let id = {
+            let config = self.config.read().unwrap();
+            match config.sound(target) {
+                Some(sound) => sound.id.clone(),
+                None => PathBuf::from(target)
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| target.to_string()),
+            }
+        };
+        self.audio.stop_one(&id);
+    }
+
     pub fn status_line(&self) -> String {
         let config = self.config.read().unwrap();
         let status = self.audio.status();
+        let active = if status.active.is_empty() {
+            String::new()
+        } else {
+            format!(" active={}", status.active.join(","))
+        };
         format!(
-            "ok playing={} device={} volume={:.2} mode={:?} sounds={}",
+            "ok playing={}{active} device={} volume={:.2} mode={:?} sounds={}",
             status.playing,
             status.device.as_deref().unwrap_or("default"),
             status.master_volume,

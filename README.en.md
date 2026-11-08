@@ -142,6 +142,8 @@ micboard-gui
 What the window does:
 
 - a card for every sound, click one to play it; if the daemon is offline it starts first;
+- a **Now playing** bar shows exactly which sounds are audible, with animated indicators and **Stop all**; it reads the daemon state, so hotkey-triggered sounds show up too;
+- a playing card is highlighted in gold, its ▶ button turns into ■, and that button stops only that sound;
 - **Add sound** and drag and drop append a `[[sound]]` block to the config;
 - remove a sound (× on the card) with a confirmation;
 - search by name, file or hotkey (`Ctrl+F`), with a match count;
@@ -294,7 +296,7 @@ micboard reload
 | --- | --- |
 | `micboard run [--no-hotkeys]` | Run the daemon. |
 | `micboard play <id\|path> [--volume N] [--device NAME]` | Play a sound. Uses the daemon when running, otherwise plays directly. |
-| `micboard stop` | Stop all sounds. |
+| `micboard stop [id]` | Stop all sounds, or just the given one. |
 | `micboard add <file> [--id ID] [--hotkey COMBO] [--volume N]` | Add a file to the config. |
 | `micboard remove <id>` | Remove a sound from the config. |
 | `micboard volume <0.0..4.0>` | Set and persist the master volume. |

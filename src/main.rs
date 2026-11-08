@@ -95,8 +95,11 @@ enum CliCommand {
     },
     /// Stop the running daemon
     Quit,
-    /// Stop all currently playing sounds
-    Stop,
+    /// Stop all currently playing sounds, or one sound by id
+    Stop {
+        /// Sound id to stop (omit to stop everything)
+        target: Option<String>,
+    },
     /// List configured sounds
     List {
         /// Print machine-readable JSON (used by the GUI)
@@ -222,9 +225,13 @@ fn run(cli: Cli) -> Result<()> {
             }
             Ok(())
         }
-        CliCommand::Stop => {
+        CliCommand::Stop { target } => {
             let config = Config::load_or_create(&config_path)?;
-            match ipc::request(config.port, "stop") {
+            let command = match target {
+                Some(target) if !target.is_empty() => format!("stop {target}"),
+                _ => "stop".to_string(),
+            };
+            match ipc::request(config.port, &command) {
                 Ok(response) => println!("{response}"),
                 Err(_) => println!("MicBoard daemon is not running."),
             }
@@ -426,6 +433,12 @@ fn show_status(config_path: &Path, json: bool) -> Result<()> {
                             serde_json::json!(value.parse::<u64>().unwrap_or(0))
                         }
                         "volume" => serde_json::json!(value.parse::<f64>().unwrap_or(1.0)),
+                        "active" => serde_json::json!(
+                            value
+                                .split(',')
+                                .filter(|id| !id.is_empty())
+                                .collect::<Vec<_>>()
+                        ),
                         _ => serde_json::json!(value),
                     };
                     object.insert(key.to_string(), value);

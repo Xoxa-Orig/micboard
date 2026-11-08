@@ -29,6 +29,8 @@ pub struct PlayRequest {
 #[derive(Debug, Clone, Default)]
 pub struct Status {
     pub playing: usize,
+    /// Ids of the sounds that are currently audible, in start order.
+    pub active: Vec<String>,
     pub device: Option<String>,
     pub last_error: Option<String>,
     pub master_volume: f32,
@@ -37,6 +39,7 @@ pub struct Status {
 enum Cmd {
     Play(PlayRequest),
     StopAll,
+    StopOne(String),
     SetMaster(f32),
     SetDevice(Option<String>),
     SetMode(PlayMode),
@@ -73,6 +76,7 @@ impl AudioHandle {
         let master = Arc::new(AtomicU32::new(config.master_volume.to_bits()));
         let status = Arc::new(Mutex::new(Status {
             playing: 0,
+            active: Vec::new(),
             device: config.effective_device(),
             last_error: None,
             master_volume: config.master_volume,
@@ -123,6 +127,11 @@ impl AudioHandle {
 
     pub fn stop_all(&self) {
         let _ = self.tx.send(Cmd::StopAll);
+    }
+
+    /// Stop only the playback started from the sound with this id.
+    pub fn stop_one(&self, name: &str) {
+        let _ = self.tx.send(Cmd::StopOne(name.to_string()));
     }
 
     pub fn set_master(&self, volume: f32) {
@@ -211,7 +220,9 @@ fn run(
         guard.device = backend.device();
     }
 
-    let mut active: Vec<Box<dyn Active>> = Vec::new();
+    // Each playback keeps the id of the sound that started it, so the GUI
+    // can highlight exactly what is audible.
+    let mut active: Vec<(String, Box<dyn Active>)> = Vec::new();
 
     loop {
         let cmd = rx.recv_timeout(Duration::from_millis(50));
@@ -219,7 +230,7 @@ fn run(
             Ok(Cmd::Play(req)) => {
                 pending.fetch_sub(1, Ordering::SeqCst);
                 if mode == PlayMode::Exclusive {
-                    for playback in &active {
+                    for (_, playback) in &active {
                         playback.stop();
                     }
                     active.clear();
@@ -231,7 +242,7 @@ fn run(
                     Some(backend) => match backend.play(&req, &master, &status) {
                         Ok(playback) => {
                             info!("playing '{}' ({})", req.name, req.path.display());
-                            active.push(playback);
+                            active.push((req.name.clone(), playback));
                             status.lock().unwrap().last_error = None;
                         }
                         Err(err) => {
@@ -247,19 +258,28 @@ fn run(
             }
             Ok(Cmd::StopAll) => {
                 debug!("stopping {} playback(s)", active.len());
-                for playback in &active {
+                for (_, playback) in &active {
                     playback.stop();
                 }
                 active.clear();
             }
+            Ok(Cmd::StopOne(name)) => {
+                debug!("stopping playback of '{name}'");
+                for (active_name, playback) in &active {
+                    if active_name == &name {
+                        playback.stop();
+                    }
+                }
+                active.retain(|(active_name, _)| active_name != &name);
+            }
             Ok(Cmd::SetMaster(volume)) => {
-                for playback in &active {
+                for (_, playback) in &active {
                     playback.set_master(volume);
                 }
                 status.lock().unwrap().master_volume = volume;
             }
             Ok(Cmd::SetDevice(new_device)) => {
-                for playback in &active {
+                for (_, playback) in &active {
                     playback.stop();
                 }
                 active.clear();
@@ -279,11 +299,13 @@ fn run(
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
 
-        active.retain(|playback| !playback.finished());
-        status.lock().unwrap().playing = active.len();
+        active.retain(|(_, playback)| !playback.finished());
+        let mut guard = status.lock().unwrap();
+        guard.playing = active.len();
+        guard.active = active.iter().map(|(name, _)| name.clone()).collect();
     }
 
-    for playback in &active {
+    for (_, playback) in &active {
         playback.stop();
     }
 }

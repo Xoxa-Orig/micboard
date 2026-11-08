@@ -128,7 +128,7 @@ cat <<'EOF'
 {"config":"/tmp/x.toml","device":"MicBoard","master_volume":0.8,"mode":"overlap","hotkeys":"auto","virtual_mic":{"source":"MicBoard_Mic"},"sounds":[{"id":"tone","file":"/tmp/tone.wav","hotkey":"ctrl+alt+1","volume":1.0,"exists":true}]}
 EOF
 elif [ "$1" = "status" ]; then
-echo '{"running":true,"playing":0}'
+echo '{"running":true,"playing":1,"active":["tone"]}'
 fi
 )"));
         QVERIFY(QFile::setPermissions(command, QFile::ReadOwner | QFile::WriteOwner
@@ -147,6 +147,8 @@ fi
         QCOMPARE(backend.mode(), QString("overlap"));
         QVERIFY(qAbs(backend.masterVolume() - 0.8) < 0.001);
         QCOMPARE(backend.sounds().first().toMap().value("id").toString(), QString("tone"));
+        QCOMPARE(backend.playing(), 1);
+        QCOMPARE(backend.playingIds(), QStringList{"tone"});
 
         if (oldBinary.isEmpty())
             qunsetenv("MICBOARD_BIN");
@@ -156,6 +158,53 @@ fi
             qunsetenv("MICBOARD_CONFIG");
         else
             qputenv("MICBOARD_CONFIG", oldConfig);
+    }
+
+    void backendStopsOneSound()
+    {
+        QTemporaryDir dir;
+        const QString command = dir.filePath("micboard");
+        const QString log = dir.filePath("stopped.log");
+        QVERIFY(write(command, R"(#!/bin/sh
+case "$1" in
+  list) echo '{"config":"/tmp/x.toml","device":"MicBoard","master_volume":1.0,"mode":"overlap","hotkeys":"auto","virtual_mic":{"source":"MicBoard_Mic"},"sounds":[]}' ;;
+  status) echo '{"running":true,"playing":2,"active":["tone","horn"]}' ;;
+  stop) echo "$2" >> "$FAKE_LOG" ;;
+esac
+)"));
+        QVERIFY(QFile::setPermissions(command, QFile::ReadOwner | QFile::WriteOwner
+                                                   | QFile::ExeOwner));
+
+        const QByteArray oldBinary = qgetenv("MICBOARD_BIN");
+        const QByteArray oldConfig = qgetenv("MICBOARD_CONFIG");
+        const QByteArray oldLog = qgetenv("FAKE_LOG");
+        qputenv("MICBOARD_BIN", command.toUtf8());
+        qputenv("MICBOARD_CONFIG", (dir.path() + "/config.toml").toUtf8());
+        qputenv("FAKE_LOG", log.toUtf8());
+
+        Backend backend;
+        QVERIFY(backend.running());
+        QCOMPARE(backend.playingIds(), (QStringList{"tone", "horn"}));
+
+        backend.stopSound("tone");
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(log).size() > 0, 4000);
+
+        QFile stopped(log);
+        QVERIFY(stopped.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(stopped.readAll()).trimmed(), QString("tone"));
+
+        if (oldBinary.isEmpty())
+            qunsetenv("MICBOARD_BIN");
+        else
+            qputenv("MICBOARD_BIN", oldBinary);
+        if (oldConfig.isEmpty())
+            qunsetenv("MICBOARD_CONFIG");
+        else
+            qputenv("MICBOARD_CONFIG", oldConfig);
+        if (oldLog.isEmpty())
+            qunsetenv("FAKE_LOG");
+        else
+            qputenv("FAKE_LOG", oldLog);
     }
 
     void backendStartsTheDaemonBeforePlaying()

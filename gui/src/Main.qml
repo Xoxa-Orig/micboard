@@ -341,6 +341,64 @@ ApplicationWindow {
                 }
             }
 
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 54
+                radius: 14
+                color: backend.playing > 0 ? theme.mintSoft : theme.panel
+                border.width: 1
+                border.color: backend.playing > 0 ? theme.mintDeep : theme.line
+
+                Behavior on color { ColorAnimation { duration: 120 } }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 10
+                    spacing: 12
+
+                    PlayingBars {
+                        running: backend.playing > 0
+                        barColor: theme.mintDeep
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 14
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 1
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: backend.playing > 0
+                                  ? qsTr("Now playing")
+                                  : backend.running
+                                    ? qsTr("Nothing is playing")
+                                    : qsTr("Daemon offline")
+                            color: backend.playing > 0 ? theme.ink : theme.muted
+                            font.pixelSize: 12
+                            font.weight: backend.playing > 0 ? Font.DemiBold : Font.Normal
+                            elide: Text.ElideRight
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: backend.playing > 0
+                            text: backend.playingIds.join("  ·  ")
+                            color: theme.mintDeep
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    SoftButton {
+                        text: qsTr("Stop all")
+                        active: backend.playing > 0
+                        onClicked: backend.stopAll()
+                    }
+                }
+            }
+
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -370,13 +428,14 @@ ApplicationWindow {
                                 width: win.cardWidth(flow.width)
                                 sound: modelData
                                 selected: win.selectedId === modelData.id
-                                playing: backend.playing > 0
-                                         && backend.lastPlayedId === modelData.id
+                                playing: backend.playingIds.indexOf(modelData.id) >= 0
 
                                 onPlayRequested: {
                                     win.selectedId = modelData.id;
                                     backend.play(modelData.id);
                                 }
+
+                                onStopRequested: backend.stopSound(modelData.id)
 
                                 onRemoveRequested: {
                                     win.pendingRemoveId = modelData.id;

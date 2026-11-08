@@ -3,6 +3,7 @@
         <file alias="Main.qml">Main.qml</file>
         <file alias="SoundCard.qml">SoundCard.qml</file>
         <file alias="SoftButton.qml">SoftButton.qml</file>
+        <file alias="PlayingBars.qml">PlayingBars.qml</file>
         <file alias="VolumeSlider.qml">VolumeSlider.qml</file>
         <file alias="i18n/en.json">i18n/en.json</file>
         <file alias="i18n/ru.json">i18n/ru.json</file>

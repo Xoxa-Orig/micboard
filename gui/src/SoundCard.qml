@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 
 Rectangle {
@@ -9,13 +10,16 @@ Rectangle {
     property bool playing: false
 
     signal playRequested()
+    signal stopRequested()
     signal removeRequested()
 
     implicitHeight: 128
     radius: 16
-    color: selected ? theme.mintSoft : cardHover.hovered ? theme.panelHover : theme.panel
-    border.width: selected ? 2 : 1
-    border.color: selected ? theme.mintDeep : theme.line
+    color: playing ? theme.goldSoft
+                  : selected ? theme.mintSoft
+                             : cardHover.hovered ? theme.panelHover : theme.panel
+    border.width: playing || selected ? 2 : 1
+    border.color: playing ? theme.gold : selected ? theme.mintDeep : theme.line
 
     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -47,17 +51,23 @@ Rectangle {
 
             Text {
                 anchors.centerIn: parent
-                anchors.horizontalCenterOffset: 2
-                text: "▶"
+                anchors.horizontalCenterOffset: card.playing ? 0 : 2
+                text: card.playing ? "■" : "▶"
                 color: theme.dark
                 font.family: "Noto Sans"
                 font.pixelSize: 16
             }
 
+            HoverHandler { id: playHover }
+
+            ToolTip.visible: playHover.hovered
+            ToolTip.text: card.playing ? qsTr("Stop this sound") : qsTr("Play")
+            ToolTip.delay: 400
+
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: card.playRequested()
+                onClicked: card.playing ? card.stopRequested() : card.playRequested()
             }
         }
 
@@ -70,19 +80,12 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Rectangle {
+                PlayingBars {
                     visible: card.playing
-                    width: 8
-                    height: 8
-                    radius: 4
-                    color: theme.gold
-
-                    SequentialAnimation on opacity {
-                        running: card.playing
-                        loops: Animation.Infinite
-                        NumberAnimation { to: 0.25; duration: 550; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: 1.0; duration: 550; easing.type: Easing.InOutSine }
-                    }
+                    running: card.playing
+                    barColor: theme.gold
+                    Layout.preferredWidth: 18
+                    Layout.preferredHeight: 14
                 }
 
                 Text {
@@ -169,6 +172,26 @@ Rectangle {
                         color: theme.danger
                         font.family: "Noto Sans"
                         font.pixelSize: 10
+                    }
+                }
+
+                Rectangle {
+                    visible: card.playing
+                    height: 21
+                    width: playingLabel.implicitWidth + 16
+                    radius: 10
+                    color: theme.mintSoft
+                    border.width: 1
+                    border.color: theme.mintDeep
+
+                    Text {
+                        id: playingLabel
+                        anchors.centerIn: parent
+                        text: qsTr("Playing")
+                        color: theme.mintDeep
+                        font.family: "Noto Sans"
+                        font.pixelSize: 10
+                        font.weight: Font.DemiBold
                     }
                 }
 

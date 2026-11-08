@@ -27,7 +27,9 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             runAction({"volume", QString::number(m_masterVolume, 'f', 2)}, {}, false);
     });
 
-    m_poll.setInterval(1500);
+    // Idle polling is cheap; while something is audible the window switches
+    // to a faster interval so the playing indicators stay honest.
+    m_poll.setInterval(1200);
     connect(&m_poll, &QTimer::timeout, this, &Backend::poll);
     m_poll.start();
 
@@ -195,8 +197,12 @@ void Backend::loadStatus() {
 
     if (running) {
         const int playing = root.value("playing").toInt();
-        if (playing != m_playing) {
+        QStringList playingIds;
+        for (const auto &value : root.value("active").toArray())
+            playingIds.append(value.toString());
+        if (playing != m_playing || playingIds != m_playingIds) {
             m_playing = playing;
+            m_playingIds = playingIds;
             emit playingChanged();
         }
         if (playing == 0 && !m_lastPlayedId.isEmpty()) {
@@ -213,8 +219,9 @@ void Backend::loadStatus() {
             play(id);
         }
     } else {
-        if (m_playing != 0) {
+        if (m_playing != 0 || !m_playingIds.isEmpty()) {
             m_playing = 0;
+            m_playingIds.clear();
             emit playingChanged();
         }
         if (m_starting && QDateTime::currentMSecsSinceEpoch() > m_startDeadline) {
@@ -230,6 +237,7 @@ void Backend::poll() {
     if (!m_available)
         return;
     loadStatus();
+    m_poll.setInterval(m_playing > 0 ? 400 : 1200);
     if (++m_ticks % 3 == 0)
         loadConfig();
 }
@@ -282,12 +290,27 @@ void Backend::play(const QString &id) {
     m_lastPlayedId = id;
     emit lastPlayedIdChanged();
     runAction({"play", id}, {}, false);
+    QTimer::singleShot(150, this, &Backend::poll);
+}
+
+void Backend::stopSound(const QString &id) {
+    if (!m_running)
+        return;
+    if (m_lastPlayedId == id) {
+        m_lastPlayedId.clear();
+        emit lastPlayedIdChanged();
+    }
+    runAction({"stop", id}, {}, false);
+    QTimer::singleShot(120, this, &Backend::poll);
 }
 
 void Backend::stopAll() {
+    if (!m_running)
+        return;
     m_lastPlayedId.clear();
     emit lastPlayedIdChanged();
     runAction({"stop"}, tr("Stopped all sounds."), false);
+    QTimer::singleShot(120, this, &Backend::poll);
 }
 
 void Backend::startDaemon() {

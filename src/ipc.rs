@@ -67,7 +67,11 @@ fn process(app: &App, line: &str) -> String {
             Err(err) => format!("err {err:#}"),
         },
         "stop" | "stopall" => {
-            app.audio.stop_all();
+            if argument.is_empty() {
+                app.audio.stop_all();
+            } else {
+                app.stop_target(argument);
+            }
             "ok stopped".to_string()
         }
         "volume" => match argument.parse::<f32>() {
