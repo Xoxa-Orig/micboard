@@ -1,5 +1,8 @@
 # MicBoard
 
+[![build](https://github.com/Xoxa-Orig/micboard/actions/workflows/build.yml/badge.svg)](https://github.com/Xoxa-Orig/micboard/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 [Русская версия](README.md)
 
 A microphone soundboard: plays any media file straight into your microphone, triggered by global hotkeys. Works on Linux (PipeWire/PulseAudio) and Windows (VB-Audio Virtual Cable).
@@ -40,10 +43,16 @@ You need `pw-cat` (PipeWire) or `paplay` (PulseAudio), plus `pactl`.
 ### 2. Build and install
 
 ```bash
-git clone <repo-url> micboard
+git clone https://github.com/Xoxa-Orig/micboard
 cd micboard
 cargo build --release
 install -Dm755 target/release/micboard ~/.local/bin/micboard
+```
+
+Or install straight from Cargo:
+
+```bash
+cargo install --git https://github.com/Xoxa-Orig/micboard
 ```
 
 Requires Rust 1.85+ (edition 2024).

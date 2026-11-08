@@ -1,5 +1,8 @@
 # MicBoard
 
+[![build](https://github.com/Xoxa-Orig/micboard/actions/workflows/build.yml/badge.svg)](https://github.com/Xoxa-Orig/micboard/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 [English version](README.en.md)
 
 Саундборд для микрофона: проигрывает любые медиафайлы прямо в микрофон по глобальным горячим клавишам. Работает на Linux (PipeWire/PulseAudio) и Windows (VB-Audio Virtual Cable).
@@ -40,10 +43,16 @@ sudo apt install pipewire pipewire-pulse pipewire-audio libpulse0 ffmpeg
 ### 2. Сборка и установка
 
 ```bash
-git clone <repo-url> micboard
+git clone https://github.com/Xoxa-Orig/micboard
 cd micboard
 cargo build --release
 install -Dm755 target/release/micboard ~/.local/bin/micboard
+```
+
+Или сразу через Cargo:
+
+```bash
+cargo install --git https://github.com/Xoxa-Orig/micboard
 ```
 
 Требуется Rust 1.85+ (edition 2024).

@@ -6,6 +6,7 @@ rust-version = "1.85"
 description = "Play media files into your microphone with global hotkeys"
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/Xoxa-Orig/micboard"
 keywords = ["soundboard", "microphone", "hotkey", "pipewire", "audio"]
 categories = ["multimedia::audio", "command-line-utilities"]
 
