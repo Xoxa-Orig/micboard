@@ -453,6 +453,65 @@ pub fn set_monitor(path: &Path, enabled: bool) -> Result<()> {
     set_top_level_value(path, "monitor", if enabled { "true" } else { "false" })
 }
 
+/// Persist the real microphone that is mixed into the virtual mic.
+pub fn set_mix_source(path: &Path, source: &str) -> Result<()> {
+    let text = fs::read_to_string(path)
+        .with_context(|| format!("cannot read config file {}", path.display()))?;
+    let mut out = String::with_capacity(text.len());
+    let mut in_virtual = false;
+    let mut seen_section = false;
+    let mut found = false;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            if in_virtual && !found {
+                out.push_str(&format!("mix_source = {}\n", toml_quote(source)));
+                found = true;
+            }
+            in_virtual = trimmed == "[virtual_mic]";
+            seen_section |= in_virtual;
+            out.push_str(line);
+            out.push('\n');
+            continue;
+        }
+
+        if in_virtual {
+            let is_key = !trimmed.starts_with('#')
+                && trimmed
+                    .split_once('=')
+                    .map(|(name, _)| name.trim() == "mix_source")
+                    .unwrap_or(false);
+            if is_key {
+                out.push_str(&format!("mix_source = {}\n", toml_quote(source)));
+                found = true;
+                continue;
+            }
+        }
+
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    if in_virtual && !found {
+        out.push_str(&format!("mix_source = {}\n", toml_quote(source)));
+        found = true;
+    }
+    if !seen_section {
+        out.push_str(&format!(
+            "\n[virtual_mic]\nmix_source = {}\n",
+            toml_quote(source)
+        ));
+        found = true;
+    }
+
+    if !found {
+        bail!("cannot add mix_source to {}", path.display());
+    }
+    fs::write(path, out).with_context(|| format!("cannot write config file {}", path.display()))?;
+    Ok(())
+}
+
 fn set_top_level_value(path: &Path, key: &str, value: &str) -> Result<()> {
     let text = fs::read_to_string(path)
         .with_context(|| format!("cannot read config file {}", path.display()))?;
@@ -545,6 +604,35 @@ mod tests {
 
         set_monitor(&path, true).unwrap();
         assert!(Config::load(&path).unwrap().monitor);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn saves_the_mixed_microphone_inside_the_virtual_mic_section() {
+        let dir = std::env::temp_dir().join(format!("micboard-mix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(
+            &path,
+            "[virtual_mic]\nenabled = true\nsink = \"MicBoard\"\n\n[[sound]]\nid = \"a\"\nfile = \"a.wav\"\n",
+        )
+        .unwrap();
+
+        set_mix_source(&path, "alsa_input.usb-mic").unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("mix_source = \"alsa_input.usb-mic\""));
+        assert!(text.find("mix_source").unwrap() < text.find("[[sound]]").unwrap());
+
+        let config = Config::load(&path).unwrap();
+        assert_eq!(
+            config.virtual_mic.mix_source.as_deref(),
+            Some("alsa_input.usb-mic")
+        );
+
+        // Running it again replaces the value instead of adding a duplicate.
+        set_mix_source(&path, "alsa_input.other").unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(text.matches("mix_source =").count(), 1);
         fs::remove_dir_all(&dir).ok();
     }
 }

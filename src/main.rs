@@ -121,6 +121,9 @@ enum CliCommand {
         /// Also mix this real microphone source into the virtual mic (Linux)
         #[arg(long, value_name = "SOURCE")]
         with_mic: Option<String>,
+        /// Make the virtual mic the system default microphone (Linux)
+        #[arg(long)]
+        default_source: bool,
     },
     /// Write the default config file
     Init {
@@ -248,7 +251,11 @@ fn run(cli: Cli) -> Result<()> {
             print_devices();
             Ok(())
         }
-        CliCommand::Setup { remove, with_mic } => setup_mic(&config_path, remove, with_mic),
+        CliCommand::Setup {
+            remove,
+            with_mic,
+            default_source,
+        } => setup_mic(&config_path, remove, with_mic, default_source),
         CliCommand::Check => check(&config_path),
         CliCommand::Reload => {
             let config = Config::load_or_create(&config_path)?;
@@ -314,6 +321,7 @@ fn list_sounds(config_path: &Path, json: bool) -> Result<()> {
                     "enabled": config.virtual_mic.enabled,
                     "sink": config.virtual_mic.sink,
                     "source": config.virtual_mic.source,
+                    "mix_source": config.virtual_mic.mix_source,
                 },
                 "sounds": sounds,
             })
@@ -531,10 +539,15 @@ fn print_devices() {
     }
 }
 
-fn setup_mic(config_path: &Path, remove: bool, with_mic: Option<String>) -> Result<()> {
+fn setup_mic(
+    config_path: &Path,
+    remove: bool,
+    with_mic: Option<String>,
+    default_source: bool,
+) -> Result<()> {
     #[cfg(windows)]
     {
-        let _ = (remove, with_mic);
+        let _ = (remove, with_mic, default_source);
         println!(
             "On Windows, MicBoard plays into a normal output device.\n\
              \n\
@@ -568,6 +581,13 @@ fn setup_mic(config_path: &Path, remove: bool, with_mic: Option<String>) -> Resu
         setup::ensure_virtual_mic(&config.virtual_mic)?;
         if let Some(source) = with_mic {
             setup::add_loopback(&config.virtual_mic, &source)?;
+            config::set_mix_source(config_path, &source)?;
+            let _ = ipc::request(config.port, "reload");
+            println!("Your microphone '{source}' is mixed into the virtual mic.");
+        }
+        if default_source {
+            setup::set_default_source(&config.virtual_mic.source)?;
+            println!("Default microphone is now '{}'.", config.virtual_mic.source);
         }
 
         println!(
@@ -662,6 +682,35 @@ fn check(config_path: &Path) -> Result<()> {
                     "[!] virtual microphone '{}' missing — run `micboard setup`",
                     config.virtual_mic.source
                 );
+            }
+
+            match &config.virtual_mic.mix_source {
+                Some(source) => {
+                    println!("[ok] real microphone '{source}' is mixed into the virtual mic")
+                }
+                None => println!(
+                    "[i] no real microphone mixed in — run `micboard setup --with-mic <source>` \
+                     so your voice is heard too"
+                ),
+            }
+
+            if let Ok(output) = ProcessCommand::new("pactl")
+                .args(["get-default-source"])
+                .output()
+            {
+                let default = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if default == config.virtual_mic.source {
+                    println!(
+                        "[ok] '{}' is the default microphone",
+                        config.virtual_mic.source
+                    );
+                } else {
+                    println!(
+                        "[i] default microphone is '{default}' — select '{}' in your app or run \
+                         `micboard setup --default-source`",
+                        config.virtual_mic.source
+                    );
+                }
             }
         }
     }

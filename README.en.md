@@ -83,10 +83,14 @@ volume = 0.8
 ### 4. Virtual microphone
 
 ```bash
-micboard setup
+micboard setup --with-mic alsa_input.usb-My_Microphone-00.mono-fallback --default-source
 ```
 
-This creates the `MicBoard` sink and the `MicBoard_Mic` source. Select **MicBoard_Mic** as the microphone in Discord / OBS / your browser.
+This creates the `MicBoard` sink and the `MicBoard_Mic` source, mixes your real microphone into it (so the other side hears both your voice and the sounds), and makes `MicBoard_Mic` the system default microphone.
+
+Find the real microphone name with `micboard devices`. Without `--with-mic` the virtual mic carries only the sounds, not your voice.
+
+Select **MicBoard_Mic** as the microphone in Discord / OBS / your browser. Apps that use the "default microphone" pick it up automatically after `--default-source` — you may need to rejoin the call or reload the tab.
 
 By default the sound goes to the virtual microphone and to the system output at the same time, so you hear what you are sending — like Soundpad. Toggle it with `micboard monitor on|off` or the 🔊 button in the window.
 
@@ -308,7 +312,7 @@ micboard reload
 | `micboard monitor [on\|off]` | Toggle hearing the sounds in your headphones. |
 | `micboard list [--json]` | List configured sounds. |
 | `micboard devices` | List sinks and sources. |
-| `micboard setup [--remove] [--with-mic SOURCE]` | Create/remove the virtual microphone. |
+| `micboard setup [--remove] [--with-mic SOURCE] [--default-source]` | Create/remove the virtual mic, mix in the real mic, and make it the default. |
 | `micboard init [--force]` | Write the default config. |
 | `micboard check` | Check the config, audio and hotkeys. |
 | `micboard reload` | Reload the config in the running daemon. |
@@ -360,6 +364,7 @@ Common issues:
 | --- | --- |
 | `no readable keyboards in /dev/input` | `sudo usermod -aG input $USER`, then log out and back in. Or `hotkeys = "off"` + `micboard hyprland-binds`. |
 | Silence in Discord | Select **MicBoard_Mic**, not `MicBoard`; check `micboard devices`. |
+| The other side does not hear the sounds | The app is using the real microphone. Select **MicBoard_Mic** or run `micboard setup --default-source`, then rejoin the call. |
 | I do not hear the sound myself | Turn on `micboard monitor on` or the 🔊 button; check `monitor_device`. |
 | Video does not play | Install `ffmpeg`. |
 | `control port ... is in use` | The daemon is already running. |

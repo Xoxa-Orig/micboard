@@ -83,10 +83,14 @@ volume = 0.8
 ### 4. Виртуальный микрофон
 
 ```bash
-micboard setup
+micboard setup --with-mic alsa_input.usb-My_Microphone-00.mono-fallback --default-source
 ```
 
-Команда создаёт sink `MicBoard` и источник `MicBoard_Mic`. В Discord / OBS / браузере выберите микрофон **MicBoard_Mic**.
+Команда создаёт sink `MicBoard` и источник `MicBoard_Mic`, подмешивает в него твой реальный микрофон (чтобы собеседник слышал и голос, и звуки) и делает `MicBoard_Mic` системным микрофоном по умолчанию.
+
+Имя реального микрофона можно узнать в `micboard devices`. Без `--with-mic` виртуальный микрофон содержит только звуки, без голоса.
+
+В Discord / OBS / браузере выберите микрофон **MicBoard_Mic**. Если приложение использует «микрофон по умолчанию», после `--default-source` он подхватится сам — возможно, потребуется перезайти в звонок или обновить вкладку.
 
 По умолчанию звук идёт одновременно в виртуальный микрофон и в системный выход, поэтому ты слышишь то, что отправляешь — как в Soundpad. Включить или выключить это можно командой `micboard monitor on|off` или кнопкой 🔊 в окне.
 
@@ -308,7 +312,7 @@ micboard reload
 | `micboard monitor [on\|off]` | Включить/выключить прослушивание в наушниках. |
 | `micboard list [--json]` | Показать настроенные звуки. |
 | `micboard devices` | Показать sink'и и источники. |
-| `micboard setup [--remove] [--with-mic SOURCE]` | Создать/удалить виртуальный микрофон. |
+| `micboard setup [--remove] [--with-mic SOURCE] [--default-source]` | Создать/удалить виртуальный микрофон, подмешать реальный микрофон и назначить его по умолчанию. |
 | `micboard init [--force]` | Записать конфиг по умолчанию. |
 | `micboard check` | Проверить конфиг, аудио и хоткеи. |
 | `micboard reload` | Перечитать конфиг в работающем демоне. |
@@ -360,6 +364,7 @@ micboard check
 | --- | --- |
 | `no readable keyboards in /dev/input` | `sudo usermod -aG input $USER`, перелогиниться. Либо `hotkeys = "off"` + `micboard hyprland-binds`. |
 | В Discord тишина | Выберите **MicBoard_Mic**, а не `MicBoard`; проверьте `micboard devices`. |
+| Собеседник не слышит звуки | Приложение использует реальный микрофон. Выберите **MicBoard_Mic** или выполните `micboard setup --default-source`, затем перезайдите в звонок. |
 | Сам не слышу звук | Включите `micboard monitor on` или кнопку 🔊 в окне; проверьте `monitor_device`. |
 | Видео не играет | Установите `ffmpeg`. |
 | `control port ... is in use` | Демон уже запущен. |

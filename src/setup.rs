@@ -50,6 +50,14 @@ pub fn ensure_virtual_mic(vm: &VirtualMic) -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+pub fn set_default_source(source: &str) -> Result<()> {
+    run_pactl(&["set-default-source", source])
+        .with_context(|| format!("cannot make '{source}' the default microphone"))?;
+    info!("default microphone is now '{source}'");
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 pub fn add_loopback(vm: &VirtualMic, source: &str) -> Result<()> {
     if !crate::util::command_exists("pactl") {
         bail!("`pactl` was not found");
