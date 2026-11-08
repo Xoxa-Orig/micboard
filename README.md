@@ -158,7 +158,7 @@ hotkeys = "off"
 ## Windows
 
 1. Установите [VB-Audio Virtual Cable](https://vb-audio.com/Cable/).
-2. Соберите `micboard.exe` (см. ниже) или скачайте готовый артефакт из Releases.
+2. Соберите `micboard.exe` (см. ниже) или скачайте готовый [архив из Releases](https://github.com/Xoxa-Orig/micboard/releases).
 3. В конфиге укажите выходное устройство:
 
    ```toml

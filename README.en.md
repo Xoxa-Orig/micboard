@@ -158,7 +158,7 @@ On X11 the `global-hotkey` crate is used. No setup needed; the backend is picked
 ## Windows
 
 1. Install [VB-Audio Virtual Cable](https://vb-audio.com/Cable/).
-2. Build `micboard.exe` (see below) or download a release artifact.
+2. Build `micboard.exe` (see below) or download a [release archive](https://github.com/Xoxa-Orig/micboard/releases).
 3. Set the output device in the config:
 
    ```toml
