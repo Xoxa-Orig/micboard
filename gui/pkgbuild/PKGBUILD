@@ -1,5 +1,5 @@
 pkgname=micboard-gui
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc='Window and soundboard for MicBoard: play sounds into your microphone'
 arch=('x86_64' 'aarch64')

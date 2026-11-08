@@ -1,3 +1,4 @@
 {
-  "%n sounds": { "one": "%n sound", "other": "%n sounds" }
+  "%n sounds": { "one": "%n sound", "other": "%n sounds" },
+  "%n found": { "one": "%n found", "other": "%n found" }
 }

@@ -104,6 +104,7 @@ private:
     QString m_message;
     bool m_messageIsError = false;
     QString m_lastPlayedId;
+    QString m_pendingPlay;
     qint64 m_startDeadline = 0;
 
     QTimer m_poll;

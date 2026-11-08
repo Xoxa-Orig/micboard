@@ -7,6 +7,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSettings>
 #include <QTimer>
 #include <QUrl>
 
@@ -17,7 +18,7 @@
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("micboard");
-    app.setApplicationVersion("0.2.0");
+    app.setApplicationVersion("0.3.0");
 
     // Matches the window to micboard.desktop, so the compositor (Wayland
     // app_id) and the launcher pick up the installed icon.
@@ -37,7 +38,24 @@ int main(int argc, char *argv[]) {
     Translator translator({}, ":/i18n", nullptr, language);
     app.installTranslator(&translator);
 
+    const QStringList arguments = QCoreApplication::arguments();
+    QSettings settings("micboard", "micboard-gui");
+    bool dark = settings.contains("darkMode")
+                    ? settings.value("darkMode").toBool()
+                    : Theme::omarchyPrefersDark();
+    if (arguments.contains("--dark"))
+        dark = true;
+    if (arguments.contains("--light"))
+        dark = false;
+
     Theme theme;
+    theme.setDarkMode(dark);
+    // Only an explicit toggle is remembered; the first start follows the
+    // desktop's theme mode.
+    QObject::connect(&theme, &Theme::darkModeChanged, &theme, [&theme] {
+        QSettings("micboard", "micboard-gui").setValue("darkMode", theme.darkMode());
+    });
+
     Backend backend;
 
     QQmlApplicationEngine engine;
@@ -51,7 +69,6 @@ int main(int argc, char *argv[]) {
 
     // A headless screenshot is handy for the README and for checking a theme
     // change without opening a window on the user's desktop.
-    const QStringList arguments = QCoreApplication::arguments();
     const int screenshotIndex = arguments.indexOf("--screenshot");
     if (screenshotIndex > 0 && screenshotIndex + 1 < arguments.size()) {
         const QString path = arguments.at(screenshotIndex + 1);

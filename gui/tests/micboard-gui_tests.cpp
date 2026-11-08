@@ -1,5 +1,6 @@
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -30,6 +31,51 @@ private slots:
 
         Theme theme(command);
         QTRY_COMPARE(theme.radius(), 6);
+    }
+
+    void themeSwitchesToDark()
+    {
+        Theme theme;
+        QCOMPARE(theme.darkMode(), false);
+        QCOMPARE(theme.bg(), QString("#F2EDE1"));
+        QCOMPARE(theme.ink(), QString("#24261F"));
+
+        QSignalSpy changed(&theme, &Theme::changed);
+        theme.setDarkMode(true);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(theme.darkMode(), true);
+        QCOMPARE(theme.bg(), QString("#121A16"));
+        QCOMPARE(theme.ink(), QString("#EFE8D8"));
+        QCOMPARE(theme.panel(), QString("#1A241F"));
+        QCOMPARE(theme.dangerSoft(), QString("#3B2621"));
+
+        theme.toggleDarkMode();
+        QCOMPARE(theme.darkMode(), false);
+        QCOMPARE(theme.bg(), QString("#F2EDE1"));
+    }
+
+    void themeFollowsTheOmarchyMode()
+    {
+        QTemporaryDir dir;
+        QVERIFY(QDir(dir.path()).mkpath("omarchy/current/theme"));
+        const QString colors = dir.filePath("omarchy/current/theme/colors.toml");
+
+        const QByteArray oldState = qgetenv("XDG_STATE_HOME");
+        qputenv("XDG_STATE_HOME", dir.path().toUtf8());
+
+        QVERIFY(write(colors, "mode = \"dark\"\nbackground = \"#0d1420\"\n"));
+        QCOMPARE(Theme::omarchyPrefersDark(), true);
+
+        QVERIFY(write(colors, "# a comment about the mode\nmode = \"light\"\n"));
+        QCOMPARE(Theme::omarchyPrefersDark(), false);
+
+        QFile::remove(colors);
+        QCOMPARE(Theme::omarchyPrefersDark(), false);
+
+        if (oldState.isEmpty())
+            qunsetenv("XDG_STATE_HOME");
+        else
+            qputenv("XDG_STATE_HOME", oldState);
     }
 
     void translatorFallsBackToEnglish()
@@ -102,6 +148,53 @@ fi
         QVERIFY(qAbs(backend.masterVolume() - 0.8) < 0.001);
         QCOMPARE(backend.sounds().first().toMap().value("id").toString(), QString("tone"));
 
+        if (oldBinary.isEmpty())
+            qunsetenv("MICBOARD_BIN");
+        else
+            qputenv("MICBOARD_BIN", oldBinary);
+        if (oldConfig.isEmpty())
+            qunsetenv("MICBOARD_CONFIG");
+        else
+            qputenv("MICBOARD_CONFIG", oldConfig);
+    }
+
+    void backendStartsTheDaemonBeforePlaying()
+    {
+        QTemporaryDir dir;
+        const QString command = dir.filePath("micboard");
+        const QString state = dir.filePath("state");
+        const QString log = dir.filePath("played.log");
+        QVERIFY(write(command, R"(#!/bin/sh
+case "$1" in
+  list) echo '{"config":"/tmp/x.toml","device":"MicBoard","master_volume":1.0,"mode":"overlap","hotkeys":"auto","virtual_mic":{"source":"MicBoard_Mic"},"sounds":[]}' ;;
+  status) if [ -f "$FAKE_STATE" ]; then echo '{"running":true,"playing":0}'; else echo '{"running":false}'; fi ;;
+  run) touch "$FAKE_STATE" ;;
+  play) echo "$2" >> "$FAKE_LOG" ;;
+  quit) rm -f "$FAKE_STATE" ;;
+esac
+)"));
+        QVERIFY(QFile::setPermissions(command, QFile::ReadOwner | QFile::WriteOwner
+                                                   | QFile::ExeOwner));
+
+        const QByteArray oldBinary = qgetenv("MICBOARD_BIN");
+        const QByteArray oldConfig = qgetenv("MICBOARD_CONFIG");
+        qputenv("MICBOARD_BIN", command.toUtf8());
+        qputenv("MICBOARD_CONFIG", (dir.path() + "/config.toml").toUtf8());
+        qputenv("FAKE_STATE", state.toUtf8());
+        qputenv("FAKE_LOG", log.toUtf8());
+
+        Backend backend;
+        QVERIFY(!backend.running());
+        backend.play("tone");
+        QTRY_VERIFY_WITH_TIMEOUT(backend.running(), 6000);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(log).size() > 0, 6000);
+
+        QFile played(log);
+        QVERIFY(played.open(QIODevice::ReadOnly));
+        QCOMPARE(QString::fromUtf8(played.readAll()).trimmed(), QString("tone"));
+
+        qunsetenv("FAKE_STATE");
+        qunsetenv("FAKE_LOG");
         if (oldBinary.isEmpty())
             qunsetenv("MICBOARD_BIN");
         else

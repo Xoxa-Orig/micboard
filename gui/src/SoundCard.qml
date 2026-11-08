@@ -158,7 +158,7 @@ Rectangle {
                     height: 21
                     width: missing.implicitWidth + 16
                     radius: 10
-                    color: "#F7E3DD"
+                    color: theme.dangerSoft
                     border.width: 1
                     border.color: theme.danger
 

@@ -207,6 +207,11 @@ void Backend::loadStatus() {
             m_starting = false;
             emit startingChanged();
         }
+        if (!m_pendingPlay.isEmpty()) {
+            const QString id = m_pendingPlay;
+            m_pendingPlay.clear();
+            play(id);
+        }
     } else {
         if (m_playing != 0) {
             m_playing = 0;
@@ -214,6 +219,7 @@ void Backend::loadStatus() {
         }
         if (m_starting && QDateTime::currentMSecsSinceEpoch() > m_startDeadline) {
             m_starting = false;
+            m_pendingPlay.clear();
             emit startingChanged();
             setMessage(tr("Could not start the daemon."), true);
         }
@@ -262,8 +268,12 @@ void Backend::runAction(const QStringList &arguments, const QString &success,
 }
 
 void Backend::play(const QString &id) {
+    // Clicking a card while the daemon is offline starts it and plays the
+    // sound as soon as the control port answers, so the window never feels
+    // like it is refusing to work.
     if (!m_running) {
-        setMessage(tr("Start the daemon first."), true);
+        m_pendingPlay = id;
+        startDaemon();
         return;
     }
     if (!m_lastPlayedId.isEmpty() && m_lastPlayedId != id) {
@@ -294,6 +304,7 @@ void Backend::startDaemon() {
 
     if (!QProcess::startDetached(m_bin, {"run"}, QDir::homePath())) {
         m_starting = false;
+        m_pendingPlay.clear();
         emit startingChanged();
         setMessage(tr("Could not start the daemon."), true);
         return;
@@ -304,6 +315,7 @@ void Backend::startDaemon() {
 }
 
 void Backend::stopDaemon() {
+    m_pendingPlay.clear();
     runAction({"quit"}, tr("Daemon stopped."), false);
 }
 

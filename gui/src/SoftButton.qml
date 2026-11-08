@@ -9,6 +9,7 @@ Rectangle {
     property bool danger: false
     property bool flat: false
     property bool active: true
+    property alias hovered: hover.hovered
 
     signal clicked()
 
@@ -33,7 +34,7 @@ Rectangle {
     border.color: primary
                   ? theme.mintDeep
                   : dark
-                    ? theme.dark
+                    ? (theme.darkMode ? theme.mintDeep : theme.dark)
                     : danger
                       ? theme.danger
                       : theme.line
@@ -45,7 +46,7 @@ Rectangle {
         color: button.primary
                ? theme.dark
                : button.dark || button.danger
-                 ? "#F8F4EA"
+                 ? theme.onDark
                  : theme.ink
         font.family: "Noto Sans"
         font.pixelSize: 12

@@ -1,5 +1,7 @@
 #include "theme.h"
 
+#include <QDir>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
@@ -42,6 +44,32 @@ Theme::~Theme() {
         m_process.kill();
         m_process.waitForFinished(1000);
     }
+}
+
+void Theme::setDarkMode(bool dark) {
+    if (dark == m_dark)
+        return;
+    m_dark = dark;
+    emit darkModeChanged();
+    emit changed();
+}
+
+bool Theme::omarchyPrefersDark() {
+    const QString state = qEnvironmentVariable(
+        "XDG_STATE_HOME", QDir::homePath() + "/.local/state");
+    QFile file(state + "/omarchy/current/theme/colors.toml");
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return false;
+    while (!file.atEnd()) {
+        const QString line = QString::fromUtf8(file.readLine()).trimmed();
+        if (line.startsWith('#'))
+            continue;
+        if (line.section('=', 0, 0).trimmed() != "mode")
+            continue;
+        const QString value = line.section('=', 1).trimmed();
+        return value.contains("dark", Qt::CaseInsensitive);
+    }
+    return false;
 }
 
 void Theme::refreshRounding() {

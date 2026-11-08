@@ -119,7 +119,9 @@ micboard autostart install
 
 `micboard-gui` is a small window that drives everything without a terminal: sound cards, master volume, starting the daemon, and adding files by drag and drop. It does not replace the daemon; it controls it through the CLI.
 
-![MicBoard window](docs/screenshot-en.png)
+| Light theme | Dark theme |
+| --- | --- |
+| ![Light theme](docs/screenshot-en.png) | ![Dark theme](docs/screenshot-dark-en.png) |
 
 Build and install (Linux, Qt 6):
 
@@ -139,12 +141,14 @@ micboard-gui
 
 What the window does:
 
-- a card for every sound, click one to play it;
+- a card for every sound, click one to play it; if the daemon is offline it starts first;
 - **Add sound** and drag and drop append a `[[sound]]` block to the config;
 - remove a sound (× on the card) with a confirmation;
+- search by name, file or hotkey (`Ctrl+F`), with a match count;
+- light and dark themes: the ☾/☀ button or `T`; on first start it follows the active Omarchy theme mode;
 - master volume, **Stop all**, **Reload config**, **Open config**;
 - start and stop the daemon;
-- shortcuts: `Space` plays the selected sound, `S` stops everything, `R` reloads, `A` adds, `Q` quits, `?` shows help.
+- shortcuts: `Ctrl+F` searches, `Space` plays the selected sound, `S` stops everything, `R` reloads, `A` adds, `T` toggles the theme, `Q` quits, `?` shows help.
 
 The window follows the language picked under Omarchy (`~/.config/omarchy/language`), falling back to the system locale. Russian and English are included.
 

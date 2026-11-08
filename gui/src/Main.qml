@@ -20,6 +20,18 @@ ApplicationWindow {
     property bool removeDialogVisible: false
     property string pendingRemoveId: ""
     property string pendingRemoveName: ""
+    property string query: ""
+    property bool searchFocused: false
+
+    readonly property var visibleSounds: {
+        const needle = win.query.toLowerCase();
+        if (needle.length === 0)
+            return backend.sounds;
+        return backend.sounds.filter(function(sound) {
+            const haystack = (sound.id + " " + sound.file + " " + (sound.hotkey || "")).toLowerCase();
+            return haystack.indexOf(needle) >= 0;
+        });
+    }
 
     function cardWidth(available) {
         const columns = Math.max(1, Math.floor((available + 14) / 300));
@@ -34,39 +46,63 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Ctrl+F"
+        context: Qt.ApplicationShortcut
+        onActivated: {
+            searchField.forceActiveFocus();
+            searchField.selectAll();
+        }
+    }
+    Shortcut {
         sequence: "?"
         context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
         onActivated: win.helpVisible = !win.helpVisible
     }
     Shortcut {
         sequence: "Space"
         context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
         onActivated: win.playSelected()
     }
     Shortcut {
         sequence: "S"
         context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
         onActivated: backend.stopAll()
     }
     Shortcut {
         sequence: "R"
         context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
         onActivated: backend.reloadConfig()
     }
     Shortcut {
         sequence: "A"
         context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
         onActivated: backend.chooseFile()
+    }
+    Shortcut {
+        sequence: "T"
+        context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
+        onActivated: theme.toggleDarkMode()
     }
     Shortcut {
         sequence: "Q"
         context: Qt.ApplicationShortcut
+        enabled: !win.searchFocused
         onActivated: Qt.quit()
     }
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
         onActivated: {
+            if (win.searchFocused) {
+                searchField.text = "";
+                win.query = "";
+            }
             win.helpVisible = false;
             win.removeDialogVisible = false;
         }
@@ -175,6 +211,14 @@ ApplicationWindow {
             }
 
             SoftButton {
+                text: theme.darkMode ? "☀" : "☾"
+                onClicked: theme.toggleDarkMode()
+                ToolTip.visible: hovered
+                ToolTip.text: theme.darkMode ? qsTr("Light theme") : qsTr("Dark theme")
+                ToolTip.delay: 400
+            }
+
+            SoftButton {
                 text: backend.running ? qsTr("Stop daemon") : qsTr("Start daemon")
                 active: !backend.starting
                 onClicked: backend.running ? backend.stopDaemon() : backend.startDaemon()
@@ -223,7 +267,9 @@ ApplicationWindow {
                     Text {
                         id: countText
                         anchors.centerIn: parent
-                        text: qsTr("%n sounds", "", backend.soundCount)
+                        text: win.query.length > 0
+                              ? qsTr("%n found", "", win.visibleSounds.length)
+                              : qsTr("%n sounds", "", backend.soundCount)
                         color: theme.muted
                         font.pixelSize: 10
                     }
@@ -231,10 +277,67 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true }
 
-                Text {
-                    text: qsTr("Click a card to play")
-                    color: theme.muted
-                    font.pixelSize: 11
+                Rectangle {
+                    Layout.preferredWidth: 200
+                    Layout.minimumWidth: 120
+                    Layout.preferredHeight: 34
+                    radius: 10
+                    color: theme.panel
+                    border.width: 1
+                    border.color: searchField.activeFocus ? theme.mintDeep : theme.line
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: searchField.text.length === 0
+                        text: qsTr("Search sounds")
+                        color: theme.muted
+                        font.pixelSize: 12
+                    }
+
+                    TextInput {
+                        id: searchField
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 26
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: theme.ink
+                        selectionColor: theme.mint
+                        selectedTextColor: theme.dark
+                        font.pixelSize: 12
+                        clip: true
+                        onTextChanged: win.query = text.trim()
+                        onActiveFocusChanged: win.searchFocused = activeFocus
+                        Keys.onReturnPressed: {
+                            if (win.visibleSounds.length > 0) {
+                                win.selectedId = win.visibleSounds[0].id;
+                                backend.play(win.visibleSounds[0].id);
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: 9
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: searchField.text.length > 0
+                        text: "×"
+                        color: clearHover.hovered ? theme.ink : theme.muted
+                        font.pixelSize: 16
+
+                        HoverHandler { id: clearHover }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                searchField.text = "";
+                                win.query = "";
+                                searchField.forceActiveFocus();
+                            }
+                        }
+                    }
                 }
             }
 
@@ -246,7 +349,7 @@ ApplicationWindow {
                     id: scroll
                     anchors.fill: parent
                     clip: true
-                    visible: backend.soundCount > 0
+                    visible: win.visibleSounds.length > 0
                     contentHeight: flow.height
                     boundsBehavior: Flickable.StopAtBounds
 
@@ -261,7 +364,7 @@ ApplicationWindow {
                         spacing: 14
 
                         Repeater {
-                            model: backend.sounds
+                            model: win.visibleSounds
 
                             SoundCard {
                                 width: win.cardWidth(flow.width)
@@ -287,7 +390,7 @@ ApplicationWindow {
 
                 Rectangle {
                     anchors.fill: parent
-                    visible: backend.soundCount === 0
+                    visible: win.visibleSounds.length === 0
                     radius: 20
                     color: theme.panel
                     border.width: 1
@@ -307,7 +410,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "♪"
+                                text: backend.soundCount === 0 ? "♪" : "⌕"
                                 color: theme.mintDeep
                                 font.family: "Noto Serif"
                                 font.pixelSize: 32
@@ -316,7 +419,9 @@ ApplicationWindow {
 
                         Text {
                             Layout.alignment: Qt.AlignHCenter
-                            text: qsTr("No sounds yet")
+                            text: backend.soundCount === 0
+                                  ? qsTr("No sounds yet")
+                                  : qsTr("Nothing found")
                             color: theme.ink
                             font.family: "Noto Serif"
                             font.pixelSize: 23
@@ -325,7 +430,9 @@ ApplicationWindow {
                         Text {
                             Layout.alignment: Qt.AlignHCenter
                             Layout.fillWidth: true
-                            text: qsTr("Drop audio or video files here, or press Add sound.")
+                            text: backend.soundCount === 0
+                                  ? qsTr("Drop audio or video files here, or press Add sound.")
+                                  : qsTr("Try a different search.")
                             color: theme.muted
                             font.pixelSize: 12
                             horizontalAlignment: Text.AlignHCenter
@@ -334,6 +441,7 @@ ApplicationWindow {
 
                         SoftButton {
                             Layout.alignment: Qt.AlignHCenter
+                            visible: backend.soundCount === 0
                             text: "+  " + qsTr("Add sound")
                             primary: true
                             onClicked: backend.chooseFile()
@@ -544,7 +652,7 @@ ApplicationWindow {
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        text: "Space  ·  S  ·  R"
+                        text: "Ctrl+F  ·  Space  ·  S  ·  T"
                         color: theme.muted
                         font.pixelSize: 10
                     }
@@ -563,7 +671,7 @@ ApplicationWindow {
         Rectangle {
             anchors.fill: parent
             visible: parent.containsDrag
-            color: "#CC1E2A24"
+            color: theme.dropOverlay
 
             ColumnLayout {
                 anchors.centerIn: parent
@@ -579,7 +687,7 @@ ApplicationWindow {
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: qsTr("Drop files to add them")
-                    color: "#F8F4EA"
+                    color: theme.onDark
                     font.family: "Noto Serif"
                     font.pixelSize: 24
                 }
@@ -603,7 +711,7 @@ ApplicationWindow {
             anchors.centerIn: parent
             width: parent.width - 32
             text: backend.message
-            color: "#F8F4EA"
+            color: theme.onDark
             font.pixelSize: 12
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
@@ -621,7 +729,7 @@ ApplicationWindow {
         anchors.fill: parent
         z: 55
         visible: win.removeDialogVisible
-        color: "#66000000"
+        color: theme.overlay
 
         MouseArea {
             anchors.fill: parent
@@ -687,7 +795,7 @@ ApplicationWindow {
         anchors.fill: parent
         z: 60
         visible: win.helpVisible
-        color: "#66000000"
+        color: theme.overlay
 
         MouseArea {
             anchors.fill: parent
@@ -697,7 +805,7 @@ ApplicationWindow {
         Rectangle {
             anchors.centerIn: parent
             width: 460
-            height: 410
+            height: 500
             radius: 22
             color: theme.panel
             border.width: 1
@@ -717,10 +825,12 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
+                        { key: "Ctrl+F", text: qsTr("Search sounds") },
                         { key: "Space", text: qsTr("Play selected") },
                         { key: "S", text: qsTr("Stop everything") },
                         { key: "R", text: qsTr("Reload config") },
                         { key: "A", text: qsTr("Add a sound") },
+                        { key: "T", text: qsTr("Toggle theme") },
                         { key: "Q", text: qsTr("Quit") },
                         { key: "?", text: qsTr("Show this help") }
                     ]
